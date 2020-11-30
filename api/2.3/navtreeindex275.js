@@ -1,5 +1,6 @@
 var NAVTREEINDEX275 =
 {
+"struct_ogre_1_1_skeleton_def_1_1_bone_data.html#ab33654bd2218fd19199cd3dd497b06de":[7,0,0,985,0,4],
 "struct_ogre_1_1_skeleton_def_1_1_bone_data.html#ac00159283d6406602653ce042b506792":[7,0,0,985,0,5],
 "struct_ogre_1_1_skeleton_def_1_1_bone_data.html#ae0df2e2b0dfadf1c09bfb4bcdd760521":[7,0,0,985,0,3],
 "struct_ogre_1_1_skeleton_def_1_1_bone_data.html#ae59cfd93ccd2acc377f1f0d4ee5d486f":[7,0,0,985,0,2],
@@ -15,10 +16,10 @@ var NAVTREEINDEX275 =
 "struct_ogre_1_1_staging_buffer_1_1_destination.html#af7b932de702d91cd632a52a6f9508681":[7,0,0,999,0,2],
 "struct_ogre_1_1_static_face_group.html":[5,2,12,57],
 "struct_ogre_1_1_static_face_group.html":[5,0,1,57],
-"struct_ogre_1_1_static_face_group.html#a09215495af768e8a68b20cf1a937af3a":[5,2,12,57,9],
 "struct_ogre_1_1_static_face_group.html#a09215495af768e8a68b20cf1a937af3a":[5,0,1,57,9],
-"struct_ogre_1_1_static_face_group.html#a2dba19f0f06565cd111206a4a673239c":[5,2,12,57,5],
+"struct_ogre_1_1_static_face_group.html#a09215495af768e8a68b20cf1a937af3a":[5,2,12,57,9],
 "struct_ogre_1_1_static_face_group.html#a2dba19f0f06565cd111206a4a673239c":[5,0,1,57,5],
+"struct_ogre_1_1_static_face_group.html#a2dba19f0f06565cd111206a4a673239c":[5,2,12,57,5],
 "struct_ogre_1_1_static_face_group.html#a3f73219edf1201e9a3c769f9ccc672bf":[5,2,12,57,1],
 "struct_ogre_1_1_static_face_group.html#a3f73219edf1201e9a3c769f9ccc672bf":[5,0,1,57,1],
 "struct_ogre_1_1_static_face_group.html#a42cad07e5dea1a57a10304dcd7b7810b":[5,2,12,57,7],
@@ -248,6 +249,5 @@ var NAVTREEINDEX275 =
 "struct_ogre_1_1_texture_definition_base_1_1_buffer_definition.html#a5e458e945ef2bb3aee331c227ba90390":[5,2,1,48,0,17],
 "struct_ogre_1_1_texture_definition_base_1_1_buffer_definition.html#a63539e89b90b52dbf72e99f2c6ca77de":[5,2,1,48,0,14],
 "struct_ogre_1_1_texture_definition_base_1_1_buffer_definition.html#a8357fe4fb4849772b94baa4bf47c7ded":[5,2,1,48,0,3],
-"struct_ogre_1_1_texture_definition_base_1_1_buffer_definition.html#a93e6a86dde5483c053ca0f2a85bbfd6c":[5,2,1,48,0,6],
-"struct_ogre_1_1_texture_definition_base_1_1_buffer_definition.html#a9cd632cfcded793f59bdf1ba8d827a74":[5,2,1,48,0,18]
+"struct_ogre_1_1_texture_definition_base_1_1_buffer_definition.html#a93e6a86dde5483c053ca0f2a85bbfd6c":[5,2,1,48,0,6]
 };
