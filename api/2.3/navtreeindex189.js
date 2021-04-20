@@ -1,5 +1,6 @@
 var NAVTREEINDEX189 =
 {
+"class_ogre_1_1_terrain_quad_tree_node.html#aef26e2fc5a8ce61b42111b85bd8bcbea":[5,1,2,15,52],
 "class_ogre_1_1_terrain_quad_tree_node.html#af27dbb3371e5c51772e304eef37afb3f":[5,1,2,15,48],
 "class_ogre_1_1_terrain_quad_tree_node.html#afa2943846ba6a2b5824a12857139cf5e":[5,1,2,15,40],
 "class_ogre_1_1_terrain_quad_tree_node.html#afb34be129bba773c740ed737f5632950":[5,1,2,15,10],
@@ -248,6 +249,5 @@ var NAVTREEINDEX189 =
 "class_ogre_1_1_texture_definition_base.html#ae70fe8c6c0e24395c1f94647c04fb079aae112a35ef4e95c9044d2dca489907f7":[5,2,1,47,5,0],
 "class_ogre_1_1_texture_definition_base.html#aebb03a9eb9c262f64ffaf4c333449941":[5,2,1,47,38],
 "class_ogre_1_1_texture_definition_base.html#aef33c6f04104697fc6ffc789c1f0f2f5":[5,2,1,47,4],
-"class_ogre_1_1_texture_definition_base.html#afa2943846ba6a2b5824a12857139cf5e":[5,2,1,47,36],
-"class_ogre_1_1_texture_definition_base.html#afe8579243f365117a04121eded69cc4a":[5,2,1,47,25]
+"class_ogre_1_1_texture_definition_base.html#afa2943846ba6a2b5824a12857139cf5e":[5,2,1,47,36]
 };

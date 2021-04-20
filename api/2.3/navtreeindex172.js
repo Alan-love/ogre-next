@@ -1,5 +1,6 @@
 var NAVTREEINDEX172 =
 {
+"class_ogre_1_1_ring_emitter.html#af91680375665bc911d80b76262882e8b":[7,0,0,930,10],
 "class_ogre_1_1_ring_emitter.html#afa2943846ba6a2b5824a12857139cf5e":[7,0,0,930,60],
 "class_ogre_1_1_ring_emitter.html#aface49e7023832dda41e44b26f048843":[7,0,0,930,46],
 "class_ogre_1_1_ring_emitter_1_1_cmd_inner_x.html":[7,0,0,930,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX172 =
 "class_ogre_1_1_runtime_assertion_exception.html#ab4518b52083342bc207ef3b677114e38":[5,2,2,95,7],
 "class_ogre_1_1_runtime_assertion_exception.html#ac3c2e6a43d2b1030eaf3ee8a34247737":[5,2,2,95,8],
 "class_ogre_1_1_runtime_assertion_exception.html#af3a22f862d5868390187d4fdd15a7d9e":[5,2,2,95,2],
-"class_ogre_1_1_runtime_assertion_exception.html#af4d342026b7af34ba64ed365c7300659":[5,2,2,95,6],
-"class_ogre_1_1_runtime_assertion_exception.html#af6e85a048732d785797152da81a2706c":[5,2,2,95,5]
+"class_ogre_1_1_runtime_assertion_exception.html#af4d342026b7af34ba64ed365c7300659":[5,2,2,95,6]
 };

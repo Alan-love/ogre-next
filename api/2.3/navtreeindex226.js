@@ -1,5 +1,6 @@
 var NAVTREEINDEX226 =
 {
+"class_ogre_1_1v1_1_1_hardware_counter_buffer.html#a19c89711b1b819388d454bedee62efda":[5,2,10,31,27],
 "class_ogre_1_1v1_1_1_hardware_counter_buffer.html#a1a1a5e9fd1743fdd09d2b1cfa740bcd4":[5,2,10,31,4],
 "class_ogre_1_1v1_1_1_hardware_counter_buffer.html#a1c727e879a260c37b00ce5505fe8e144":[5,2,10,31,19],
 "class_ogre_1_1v1_1_1_hardware_counter_buffer.html#a421b197ca3a38da17e2eb1531a645fa2":[5,2,10,31,23],
@@ -144,8 +145,8 @@ var NAVTREEINDEX226 =
 "class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a595ea4c05da8aa987d3800e65d23355d":[5,2,10,35,34],
 "class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a5caebd4b5db7696029eb412351d7767f":[5,2,10,35,11],
 "class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a6776e40af767f8db7d428f35d9b3055c":[5,2,10,35,19],
-"class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a6778f242b88650651a2a7bd7e4c97201":[5,2,10,35,27],
 "class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a6778f242b88650651a2a7bd7e4c97201":[5,2,10,35,26],
+"class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a6778f242b88650651a2a7bd7e4c97201":[5,2,10,35,27],
 "class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a6ed986689e41c247108c1c4e8cca354a":[5,2,10,35,43],
 "class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a7549369160db335ac558d0493107fecb":[5,2,10,35,28],
 "class_ogre_1_1v1_1_1_hardware_pixel_buffer.html#a787c4f5ca31d533e63f089f6d35a5e8e":[5,2,10,35,16],
@@ -248,6 +249,5 @@ var NAVTREEINDEX226 =
 "class_ogre_1_1v1_1_1_hardware_uniform_buffer.html#afa2943846ba6a2b5824a12857139cf5e":[5,2,10,37,25],
 "class_ogre_1_1v1_1_1_hardware_uniform_buffer_shared_ptr.html":[5,2,10,38],
 "class_ogre_1_1v1_1_1_hardware_uniform_buffer_shared_ptr.html#a0102c9ce0678ec964b26e47b8a5310d1":[5,2,10,38,13],
-"class_ogre_1_1v1_1_1_hardware_uniform_buffer_shared_ptr.html#a058dfd1737dcf94ed8b049718475f816":[5,2,10,38,15],
-"class_ogre_1_1v1_1_1_hardware_uniform_buffer_shared_ptr.html#a08987cfe83e246fc1e24bbc026c8e161":[5,2,10,38,16]
+"class_ogre_1_1v1_1_1_hardware_uniform_buffer_shared_ptr.html#a058dfd1737dcf94ed8b049718475f816":[5,2,10,38,15]
 };

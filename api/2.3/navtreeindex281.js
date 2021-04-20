@@ -1,5 +1,6 @@
 var NAVTREEINDEX281 =
 {
+"struct_ogre_1_1_terrain_lod_manager_1_1_lod_info.html":[5,1,2,10,1],
 "struct_ogre_1_1_terrain_lod_manager_1_1_lod_info.html#a0f891ce26a83a44aa6a3478ffe58e335":[5,1,2,10,1,4],
 "struct_ogre_1_1_terrain_lod_manager_1_1_lod_info.html#a2018decb1162dedf8e1904d9df092d53":[5,1,2,10,1,3],
 "struct_ogre_1_1_terrain_lod_manager_1_1_lod_info.html#a3d3eaf36cee2c6b6cb64bad691cd98f6":[5,1,2,10,1,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX281 =
 "struct_ogre_1_1_unlit_property.html#a8e14dfc9e395dd21136122ca6848cec7":[7,0,0,1079,38],
 "struct_ogre_1_1_unlit_property.html#a8fa73f413647ca3fcf2da10b7534f842":[7,0,0,1079,16],
 "struct_ogre_1_1_unlit_property.html#a910dd22a0d99a10dce876ea1b3fd9d3e":[7,0,0,1079,52],
-"struct_ogre_1_1_unlit_property.html#a92a6f00127166a1ecef2f5c4568c10b2":[7,0,0,1079,22],
-"struct_ogre_1_1_unlit_property.html#a936800b85a2b5f3185169b1d630d8a9c":[7,0,0,1079,34]
+"struct_ogre_1_1_unlit_property.html#a92a6f00127166a1ecef2f5c4568c10b2":[7,0,0,1079,22]
 };

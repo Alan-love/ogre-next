@@ -1,5 +1,6 @@
 var NAVTREEINDEX180 =
 {
+"class_ogre_1_1_shadow_volume_extrude_program.html#acc460f2fd05285222cc1e6b09d72ed66":[5,2,12,52,58],
 "class_ogre_1_1_shadow_volume_extrude_program.html#acc460f2fd05285222cc1e6b09d72ed66":[5,0,1,52,58],
 "class_ogre_1_1_shadow_volume_extrude_program.html#ad0efcf74f94c3f63b650c0749bb31fd8":[5,2,12,52,30],
 "class_ogre_1_1_shadow_volume_extrude_program.html#ad0efcf74f94c3f63b650c0749bb31fd8":[5,0,1,52,30],
@@ -248,6 +249,5 @@ var NAVTREEINDEX180 =
 "class_ogre_1_1_skeleton_def.html#a841b8cfdb2a174f350f30287c9cae3d2":[7,0,0,992,12],
 "class_ogre_1_1_skeleton_def.html#a93e6a86dde5483c053ca0f2a85bbfd6c":[7,0,0,992,21],
 "class_ogre_1_1_skeleton_def.html#ab1880eb906533afe67d9df4feaccf5ee":[7,0,0,992,14],
-"class_ogre_1_1_skeleton_def.html#ab78a921e54419be677839cdf15d1f0b8":[7,0,0,992,25],
-"class_ogre_1_1_skeleton_def.html#ab8f96ed1b176f4ea83d98ca3c5a7d4d2":[7,0,0,992,6]
+"class_ogre_1_1_skeleton_def.html#ab78a921e54419be677839cdf15d1f0b8":[7,0,0,992,25]
 };

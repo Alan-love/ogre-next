@@ -1,5 +1,6 @@
 var NAVTREEINDEX248 =
 {
+"class_ogre_1_1v1_1_1_text_area_overlay_element.html#a2ed9a2f3c1decac6286f8af974ce2ffc":[5,2,8,12,94],
 "class_ogre_1_1v1_1_1_text_area_overlay_element.html#a2f154d326570a6be5adfc1a401373e30":[5,2,8,12,49],
 "class_ogre_1_1v1_1_1_text_area_overlay_element.html#a2f92a5741b1c1123f7f76ce2a551c9c8":[5,2,8,12,36],
 "class_ogre_1_1v1_1_1_text_area_overlay_element.html#a3a8fafedc41616f8ae8306409443c3e4":[5,2,8,12,53],
@@ -248,6 +249,5 @@ var NAVTREEINDEX248 =
 "class_ogre_1_1v1_1_1_vertex_buffer_binding.html#a8590d4c220a3968e594b9b4fe55a0e28":[5,2,10,45,2],
 "class_ogre_1_1v1_1_1_vertex_buffer_binding.html#a889dd4af680d36fd6a07f3da864ce6a3":[5,2,10,45,25],
 "class_ogre_1_1v1_1_1_vertex_buffer_binding.html#a93e6a86dde5483c053ca0f2a85bbfd6c":[5,2,10,45,16],
-"class_ogre_1_1v1_1_1_vertex_buffer_binding.html#aaf35db6d7858883f97547833d8c3c206":[5,2,10,45,4],
-"class_ogre_1_1v1_1_1_vertex_buffer_binding.html#ab53b6b19d2c0b591b86b4df7721de343":[5,2,10,45,6]
+"class_ogre_1_1v1_1_1_vertex_buffer_binding.html#aaf35db6d7858883f97547833d8c3c206":[5,2,10,45,4]
 };
