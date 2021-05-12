@@ -1,13 +1,5 @@
 var NAVTREEINDEX283 =
 {
-"struct_ogre_1_1_vertex_bone_assignment.html#a1e16bd8b152ee8849edc690cefaba22f":[5,2,0,32,2],
-"struct_ogre_1_1_vertex_bone_assignment.html#a28656362101fb4efed98e40b5b78aa79":[5,2,0,32,0],
-"struct_ogre_1_1_vertex_bone_assignment.html#a9329a872bd7a4e3adff08eb95d6bc584":[5,2,0,32,6],
-"struct_ogre_1_1_vertex_bone_assignment.html#aa3928595e373d5b072b2927cac841d71":[5,2,0,32,5],
-"struct_ogre_1_1_vertex_bone_assignment.html#ac6643ba097ca1fee74868d58a225c97d":[5,2,0,32,1],
-"struct_ogre_1_1_vertex_bone_assignment.html#ad215fe224f5f58517d48b1806f87781d":[5,2,0,32,4],
-"struct_ogre_1_1_vertex_bone_assignment.html#ae1f8ff06c0f8054734517b2559b8f92b":[5,2,0,32,7],
-"struct_ogre_1_1_vertex_bone_assignment.html#ae97b16cce1bed8a29d5db5caca212cf2":[5,2,0,32,3],
 "struct_ogre_1_1_vertex_buffer_download_helper_1_1_download_data.html":[5,2,11,136,0],
 "struct_ogre_1_1_vertex_buffer_download_helper_1_1_download_data.html#a1d51421c164cf6347b648bbccabb90a3":[5,2,11,136,0,3],
 "struct_ogre_1_1_vertex_buffer_download_helper_1_1_download_data.html#a28368a9a3eaf378914460eaea964a3e9":[5,2,11,136,0,5],
@@ -45,8 +37,8 @@ var NAVTREEINDEX283 =
 "struct_ogre_1_1_vertices_remap_info.html#ab601cedf8a462b73ecfc7cef546ce143":[7,0,0,1104,4],
 "struct_ogre_1_1_vertices_remap_info.html#add149d2951a80aaeea8344991650ab9b":[7,0,0,1104,11],
 "struct_ogre_1_1_vertices_remap_info.html#aff1d6acd357b13527dcc45209ba398d8":[7,0,0,1104,0],
-"struct_ogre_1_1_view_point.html":[5,0,1,71],
 "struct_ogre_1_1_view_point.html":[5,2,12,71],
+"struct_ogre_1_1_view_point.html":[5,0,1,71],
 "struct_ogre_1_1_view_point.html#a3c5ae8fe5c3adce148bfebd3ed9b8e56":[5,2,12,71,1],
 "struct_ogre_1_1_view_point.html#a3c5ae8fe5c3adce148bfebd3ed9b8e56":[5,0,1,71,1],
 "struct_ogre_1_1_view_point.html#a6a25f94ff18e79c7bf0e275f60494d89":[5,0,1,71,0],
@@ -249,5 +241,13 @@ var NAVTREEINDEX283 =
 "struct_ogre_1_1_vulkan_resource_transition.html#a9c337d18258377a7a697b319fe994061":[7,0,0,1153,2],
 "struct_ogre_1_1_vulkan_resource_transition.html#acc5d10d60b904cbfebec0be95d7fdbb4":[7,0,0,1153,1],
 "struct_ogre_1_1_vulkan_vao_manager_1_1_block.html":[7,0,0,1164,0],
-"struct_ogre_1_1_vulkan_vao_manager_1_1_block.html#a1d2ac8d9e343311b2cf094c0449f88f2":[7,0,0,1164,0,2]
+"struct_ogre_1_1_vulkan_vao_manager_1_1_block.html#a1d2ac8d9e343311b2cf094c0449f88f2":[7,0,0,1164,0,2],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_block.html#a6acacae417e9f0ad719e9b885d71035f":[7,0,0,1164,0,1],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_block.html#a996ae218c5b780b83cbade37de0343c7":[7,0,0,1164,0,0],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_stride_changer.html":[7,0,0,1164,1],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_stride_changer.html#a2deadab609ac85b7b1ba1f5b5b99bd9c":[7,0,0,1164,1,5],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_stride_changer.html#a792516386c3fece87ed2fedcfcb0138e":[7,0,0,1164,1,2],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_stride_changer.html#a9034a6c247bbd23f2f8134643d5adcbc":[7,0,0,1164,1,6],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_stride_changer.html#aa094cdff22fddd6409685c4912541d0b":[7,0,0,1164,1,3],
+"struct_ogre_1_1_vulkan_vao_manager_1_1_stride_changer.html#aed7f3aafdbb007c1eb140fbbef513b19":[7,0,0,1164,1,1]
 };
