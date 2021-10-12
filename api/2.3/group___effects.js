@@ -2202,7 +2202,7 @@ var group___effects =
         [ "technique", "struct_ogre_1_1_shadow_node_helper_1_1_shadow_param.html#a6c9d59554ece092633f2ad2fbc640ee5", null ]
       ] ],
       [ "ShadowParamVec", "class_ogre_1_1_shadow_node_helper.html#a365e9a945dc2cdb574d0e1424e82113a", null ],
-      [ "createShadowNodeWithSettings", "class_ogre_1_1_shadow_node_helper.html#a38613ed6a28e3f091c61129e0271700c", null ]
+      [ "createShadowNodeWithSettings", "class_ogre_1_1_shadow_node_helper.html#ada46f211cc1d5d3175c73152620c2e29", null ]
     ] ],
     [ "ShadowTextureDefinition", "class_ogre_1_1_shadow_texture_definition.html", [
       [ "ShadowTextureDefinition", "class_ogre_1_1_shadow_texture_definition.html#a95f59e0cb3cb10ecdb6ef1c2f2ac3779", null ],
