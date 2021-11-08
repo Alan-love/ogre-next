@@ -1,5 +1,15 @@
 var NAVTREEINDEX282 =
 {
+"struct_ogre_1_1_static_face_group.html#ad258e1806394cbd8b2efe7f39d3a7296":[5,0,1,54,8],
+"struct_ogre_1_1_static_face_group.html#ae57aba80895c22bb02f633d02be64edb":[5,2,12,54,0],
+"struct_ogre_1_1_static_face_group.html#ae57aba80895c22bb02f633d02be64edb":[5,0,1,54,0],
+"struct_ogre_1_1_stencil_params.html":[5,2,2,117],
+"struct_ogre_1_1_stencil_params.html#a21b50e522ea54db40c35872a403c3897":[5,2,2,117,3],
+"struct_ogre_1_1_stencil_params.html#a2e887fc56a085cfe5ec7ce4ba649bda9":[5,2,2,117,5],
+"struct_ogre_1_1_stencil_params.html#a3171a61f29e6563edb2dc9e86326fe3c":[5,2,2,117,7],
+"struct_ogre_1_1_stencil_params.html#a3df6d17bced2516e94b129742485bb06":[5,2,2,117,4],
+"struct_ogre_1_1_stencil_params.html#a49d4a3b268abccd7a6ac9bc284581d0a":[5,2,2,117,1],
+"struct_ogre_1_1_stencil_params.html#a7d95668d775245a469fd5f660e1ebb8a":[5,2,2,117,8],
 "struct_ogre_1_1_stencil_params.html#aafb028e4dfa45cb42589fe1834d916e7":[5,2,2,117,2],
 "struct_ogre_1_1_stencil_params.html#ac5637e019c40a590c2aaa781ea19b51e":[5,2,2,117,6],
 "struct_ogre_1_1_stencil_params.html#ad32dd43db9995e1d1e054546d0f07368":[5,2,2,117,0],
@@ -178,6 +188,7 @@ var NAVTREEINDEX282 =
 "struct_ogre_1_1_texture_box.html#a5935c959161bf4c97af599ee22b86fc0":[7,0,0,1059,32],
 "struct_ogre_1_1_texture_box.html#a610e4dcf4d0a21ca5efbcbdea548c0ed":[7,0,0,1059,23],
 "struct_ogre_1_1_texture_box.html#a692a130ff0f0e88c854e5e8a35d5555b":[7,0,0,1059,1],
+"struct_ogre_1_1_texture_box.html#a772e2aa3672867d6c7f75bba4d7b9f09":[7,0,0,1059,5],
 "struct_ogre_1_1_texture_box.html#a7b4127c17633b98c6957f5362438f726":[7,0,0,1059,4],
 "struct_ogre_1_1_texture_box.html#a809d00c601a80d541f98feb6046740f4":[7,0,0,1059,17],
 "struct_ogre_1_1_texture_box.html#a82a89d85d9c84525aafdafd91bc5eb1b":[7,0,0,1059,22],
@@ -191,7 +202,6 @@ var NAVTREEINDEX282 =
 "struct_ogre_1_1_texture_box.html#ab9bb9c359093c2e1347436e1ee12a2b8":[7,0,0,1059,24],
 "struct_ogre_1_1_texture_box.html#abc975ae19f79584c2d29246bd90b01a8":[7,0,0,1059,10],
 "struct_ogre_1_1_texture_box.html#abd49325e3605351af777bfea9b56ba24":[7,0,0,1059,25],
-"struct_ogre_1_1_texture_box.html#ac8cb10968cf40820a8ac59f2f710e857":[7,0,0,1059,5],
 "struct_ogre_1_1_texture_box.html#ad847c9af8c06cb208dfed687440d336e":[7,0,0,1059,3],
 "struct_ogre_1_1_texture_box.html#adbe9c1ccc9b5c57bd04a34ab0c14781a":[7,0,0,1059,30],
 "struct_ogre_1_1_texture_box.html#adf17acee81fd9154a8490e6eb432188b":[7,0,0,1059,20],
@@ -239,15 +249,5 @@ var NAVTREEINDEX282 =
 "struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#a5cd5227308171e5b2833e9ce6236796d":[5,2,11,115,2,1],
 "struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#a6120402c2d03d3edf2d35611d89a32cc":[5,2,11,115,2,2],
 "struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#a699a1757f9144260193c965cf3f31f24":[5,2,11,115,2,5],
-"struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#a89a9a4ac9ac3d316feb57e771658abc1":[5,2,11,115,2,0],
-"struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#aa1b41c6e4b90d1428bdef5a7afc4cafb":[5,2,11,115,2,7],
-"struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#aab7eeaef23555bb1eb2c025a169022f1":[5,2,11,115,2,4],
-"struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#ae6479fe6bf6fcaaec2eabbcb166baab9":[5,2,11,115,2,6],
-"struct_ogre_1_1_texture_pool.html":[5,2,11,118],
-"struct_ogre_1_1_texture_pool.html#a12bc237f86b8626243426104b714b23a":[5,2,11,118,6],
-"struct_ogre_1_1_texture_pool.html#a175ce03b600f641fb9b2b1f6864aaf7a":[5,2,11,118,1],
-"struct_ogre_1_1_texture_pool.html#a18f94e620a9a2320cefe92bfa8e7f02b":[5,2,11,118,0],
-"struct_ogre_1_1_texture_pool.html#a2ad4619ddc68c51d99bf4f678776537d":[5,2,11,118,2],
-"struct_ogre_1_1_texture_pool.html#a4b6d352df8ce643f8e39d1b073bd3be4":[5,2,11,118,5],
-"struct_ogre_1_1_texture_pool.html#a9f0f28ecfa09ca7abbcc2ec817051482":[5,2,11,118,4]
+"struct_ogre_1_1_texture_gpu_manager_1_1_resource_entry.html#a89a9a4ac9ac3d316feb57e771658abc1":[5,2,11,115,2,0]
 };
