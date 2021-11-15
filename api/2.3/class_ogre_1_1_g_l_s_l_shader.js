@@ -118,6 +118,7 @@ var class_ogre_1_1_g_l_s_l_shader =
     [ "removeListener", "class_ogre_1_1_g_l_s_l_shader.html#a3c49142f739ba8fb56d6e7b3db235fb7", null ],
     [ "resetCompileError", "class_ogre_1_1_g_l_s_l_shader.html#a2443ed18b880eb939123bb8daf9165c7", null ],
     [ "setAdjacencyInfoRequired", "class_ogre_1_1_g_l_s_l_shader.html#a39b43157d6b40626101e5de8f9c77bf5", null ],
+    [ "setAutoReflectArrayBindingsInRootLayout", "class_ogre_1_1_g_l_s_l_shader.html#ae4d9c0afca2284a5e0972bdf8b6ff543", null ],
     [ "setBackgroundLoaded", "class_ogre_1_1_g_l_s_l_shader.html#ae0a0007de944eb3c2f933a372a752b35", null ],
     [ "setBuildParametersFromReflection", "class_ogre_1_1_g_l_s_l_shader.html#a91663e447c0a4addd142cc2be5c1800b", null ],
     [ "setColumnMajorMatrices", "class_ogre_1_1_g_l_s_l_shader.html#a079bddd2bf8c361ba53e23dfc610cae3", null ],

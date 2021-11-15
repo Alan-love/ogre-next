@@ -93,6 +93,7 @@ var class_ogre_1_1_high_level_gpu_program =
     [ "removeListener", "class_ogre_1_1_high_level_gpu_program.html#a3c49142f739ba8fb56d6e7b3db235fb7", null ],
     [ "resetCompileError", "class_ogre_1_1_high_level_gpu_program.html#a2443ed18b880eb939123bb8daf9165c7", null ],
     [ "setAdjacencyInfoRequired", "class_ogre_1_1_high_level_gpu_program.html#a39b43157d6b40626101e5de8f9c77bf5", null ],
+    [ "setAutoReflectArrayBindingsInRootLayout", "class_ogre_1_1_high_level_gpu_program.html#ae4d9c0afca2284a5e0972bdf8b6ff543", null ],
     [ "setBackgroundLoaded", "class_ogre_1_1_high_level_gpu_program.html#ae0a0007de944eb3c2f933a372a752b35", null ],
     [ "setBuildParametersFromReflection", "class_ogre_1_1_high_level_gpu_program.html#a91663e447c0a4addd142cc2be5c1800b", null ],
     [ "setComputeGroupDimensions", "class_ogre_1_1_high_level_gpu_program.html#a84c3904bfaeeb1166dbca41e0c9f3b29", null ],
