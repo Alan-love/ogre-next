@@ -29,38 +29,133 @@ THE SOFTWARE.
 #define _OgreRenderQueue_H_
 
 #include "OgrePrerequisites.h"
-#include "OgreSharedPtr.h"
+
 #include "OgreHlmsCommon.h"
-#include "OgreHeaderPrefix.h"
 #include "OgreIteratorWrappers.h"
+#include "OgreSharedPtr.h"
+#include "Threading/OgreLightweightMutex.h"
+#include "Threading/OgreSemaphore.h"
 
-namespace Ogre {
+#include "OgreHeaderPrefix.h"
 
+#include <atomic>
+
+namespace Ogre
+{
     class Camera;
     class MovableObject;
 
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup RenderSystem
-    *  @{
-    */
+     *  @{
+     */
 
     struct QueuedRenderable
     {
-        uint64              hash;
+        uint64               hash;
         Renderable          *renderable;
         MovableObject const *movableObject;
 
         QueuedRenderable() : hash( 0 ), renderable( 0 ), movableObject( 0 ) {}
-        QueuedRenderable( uint64 _hash, Renderable *_renderable,
-                          const MovableObject *_movableObject ) :
-            hash( _hash ), renderable( _renderable ), movableObject( _movableObject ) {}
-
-        bool operator < ( const QueuedRenderable &_r ) const
+        QueuedRenderable( uint64 _hash, Renderable *_renderable, const MovableObject *_movableObject ) :
+            hash( _hash ),
+            renderable( _renderable ),
+            movableObject( _movableObject )
         {
-            return this->hash < _r.hash;
         }
+
+        bool operator<( const QueuedRenderable &_r ) const { return this->hash < _r.hash; }
+    };
+
+    class ParallelHlmsCompileQueue
+    {
+    public:
+        struct Request
+        {
+            /// Must stay alive until worker thread is done with it. In the case of warmUpSerial &
+            /// updateWarmUpThread, we store instead an index to RenderQueue::mPendingPassCaches
+            /// because otherwise the iterators keep getting invalidated.
+            HlmsCache const *passCache;
+            HlmsCache       *reservedStubEntry;
+            QueuedRenderable queuedRenderable;
+            uint32           renderableHash;
+            uint32           finalHash;
+        };
+
+    protected:
+        std::vector<Request> mRequests;  // GUARDED_BY( mMutex )
+        LightweightMutex     mMutex;
+        Semaphore            mSemaphore;
+        std::atomic<bool>    mKeepCompiling;
+        std::atomic<uint32>  mCompilationIncompleteCounter;  // at least one was skipped.
+        // 16ms in the future, or UINT64_MAX. This contains the current deadline.
+        uint64 mCompilationDeadline;
+        // The 16ms in the future, or UINT64_MAX. This value is set only once per frame.
+        // mCompilationDeadline contains the current value being used (which may be different
+        // if deadline must be disabled).
+        uint64 mMasterDeadline;
+        bool   mDeadlineSet;
+
+        bool               mExceptionFound;     // GUARDED_BY( mMutex )
+        std::exception_ptr mThreadedException;  // GUARDED_BY( mMutex )
+
+        void setupDeadline( Root &root, SceneManager &sceneManager, bool casterPass );
+
+    public:
+        ParallelHlmsCompileQueue();
+
+        inline void pushRequest( const Request &&request )
+        {
+            ScopedLock lock( mMutex );
+            request.reservedStubEntry->flags = HLMS_CACHE_FLAGS_COMPILATION_REQUESTED;
+            mRequests.emplace_back( request );
+            mSemaphore.increment();
+        }
+
+        inline void pushWarmUpRequest( const Request &&request )
+        {
+            request.reservedStubEntry->flags = HLMS_CACHE_FLAGS_COMPILATION_REQUESTED;
+            mRequests.emplace_back( request );
+        }
+
+        void frameEnded();
+
+        /** Starts worker threads (job queue) so they start accepting work every time pushRequest()
+            gets called and will keep compiling those shaders until stopAndWait() is called.
+
+            The work is done in updateThread() and is in charge of compiling shaders AND generating PSOs.
+        @remarks
+            This function must not be called if RenderSystem::supportsMultithreadedShaderCompilation
+            is false.
+        @param sceneManager
+        */
+        void start( Root *root, SceneManager *sceneManager, bool casterPass );
+        /** Signals worker threads we won't be submitting more work, so they should stop once they're
+            done compiling all pending shaders / PSOs.
+
+            Will wait until all shaders are done.
+        @param sceneManager
+        */
+        void stopAndWait( SceneManager *sceneManager );
+        /// The actual work done by the job queues.
+        void updateThread( size_t threadIdx, HlmsManager *hlmsManager );
+
+        /// Similar to start() and stopAndWait() at the same time: It assumes all work has already been
+        /// gathered in mRequests via pushWarmUpRequest() (instead of gather it as we go)
+        /// and fires all threads to compile the shaders and PSOs in parallel.
+        ///
+        /// It will wait until all threads are done.
+        void fireWarmUpParallel( Root *root, SceneManager *sceneManager, bool casterPass );
+
+        /// The actual work done by fireWarmUpParallel().
+        void updateWarmUpThread( size_t threadIdx, HlmsManager *hlmsManager,
+                                 const HlmsCache *passCaches );
+
+        /// Serial alternative of fireWarmUpParallel() + updateWarmUpThread() for when
+        /// RenderSystem::supportsMultithreadedShaderCompilation is false.
+        void warmUpSerial( HlmsManager *hlmsManager, const HlmsCache *passCaches );
     };
 
     /** Class to manage the scene object rendering queue.
@@ -69,7 +164,7 @@ namespace Ogre {
             material to renderable object is wrapped in a class for ease of use.
         @par
             This class includes the concept of 'queue groups' which allows the application
-            adding the renderable to specifically schedule it so that it is included in 
+            adding the renderable to specifically schedule it so that it is included in
             a discrete group. Good for separating renderables into the main scene,
             backgrounds and overlays, and also could be used in the future for more
             complex multipass routines like stenciling.
@@ -81,7 +176,8 @@ namespace Ogre {
             Rectangle2D:        10 \n
             v1::Entity:         110 \n
             v1::Rectangle2D:    110 \n
-            ParticleSystem:     110 \n
+            ParticleSystem (v1):110 \n
+            ParticleSystem (v2):kParticleSystemDefaultRenderQueueId \n
             [.. more unlisted ..]
         @remarks
             By default, the render queues have the following mode set: \n
@@ -90,7 +186,7 @@ namespace Ogre {
             200-224: FAST \n
             225-255: V1_FAST
     */
-    class _OgreExport RenderQueue : public RenderQueueAlloc
+    class _OgreExport RenderQueue : public OgreAllocatedObj
     {
     public:
         enum Modes
@@ -115,7 +211,11 @@ namespace Ogre {
             /// of homogeneous and heterogenous meshes, with many different kinds
             /// of materials and textures.
             /// Only v2 Items can be put in this queue.
-            FAST
+            FAST,
+
+            /// Renders ParticleSystemDef (i.e. ParticleFX2 plugin).
+            /// Don't put v1 Particle Systems here.
+            PARTICLE_SYSTEM,
         };
 
         enum RqSortMode
@@ -130,9 +230,9 @@ namespace Ogre {
 
         struct ThreadRenderQueue
         {
-            QueuedRenderableArray   q;
+            QueuedRenderableArray q;
             /// The padding prevents false cache sharing when multithreading.
-            uint8                   padding[128];
+            uint8 padding[128];
         };
 
         typedef FastArray<ThreadRenderQueue> QueuedRenderableArrayPerThread;
@@ -140,65 +240,94 @@ namespace Ogre {
         struct RenderQueueGroup
         {
             QueuedRenderableArrayPerThread mQueuedRenderablesPerThread;
-            QueuedRenderableArray   mQueuedRenderables;
-            RqSortMode              mSortMode;
-            bool                    mSorted;
-            Modes                   mMode;
+            QueuedRenderableArray          mQueuedRenderables;
+            RqSortMode                     mSortMode;
+            bool                           mSorted;
+            Modes                          mMode;
 
             RenderQueueGroup() : mSortMode( NormalSort ), mSorted( false ), mMode( FAST ) {}
         };
 
-        typedef vector<IndirectBufferPacked*>::type IndirectBufferPackedVec;
+        typedef vector<IndirectBufferPacked *>::type IndirectBufferPackedVec;
+
+        struct PsoCreateEntry
+        {
+            uint32           finalHash;
+            uint16           cacheIdx;
+            bool             casterPass;
+            QueuedRenderable queuedRenderable;
+
+            bool operator<( const PsoCreateEntry &b ) const { return this->finalHash < b.finalHash; }
+            bool operator<( const uint32_t otherHash ) const { return this->finalHash < otherHash; }
+        };
+        typedef std::vector<PsoCreateEntry> PsoCreateEntryVec;
 
         RenderQueueGroup mRenderQueues[256];
 
-        HlmsManager *mHlmsManager;
-        SceneManager*mSceneManager;
-        VaoManager  *mVaoManager;
-        Root        *mRoot;
+        HlmsManager  *mHlmsManager;
+        SceneManager *mSceneManager;
+        VaoManager   *mVaoManager;
+        Root         *mRoot;
 
-        bool                    mLastWasCasterPass;
-        uint32                  mLastVaoName;
-        v1::VertexData const    *mLastVertexData;
-        v1::IndexData const     *mLastIndexData;
-        uint32                  mLastTextureHash;
+        bool                  mLastWasCasterPass;
+        uint32                mLastVaoName;
+        v1::VertexData const *mLastVertexData;
+        v1::IndexData const  *mLastIndexData;
+        uint32                mLastTextureHash;
 
-        CommandBuffer           *mCommandBuffer;
+        CommandBuffer          *mCommandBuffer;
         IndirectBufferPackedVec mFreeIndirectBuffers;
         IndirectBufferPackedVec mUsedIndirectBuffers;
 
-        HlmsCache               mPassCache[HLMS_MAX];
+        HlmsCache mPassCache[HLMS_MAX];
 
         uint32 mRenderingStarted;
 
-        /** Returns a new (or an existing) indirect buffer that can hold the requested number of draws.
+        std::vector<HlmsCache> mPendingPassCaches;
+
+        ParallelHlmsCompileQueue mParallelHlmsCompileQueue;
+
+        /** Returns a new (or an existing) indirect buffer that can hold the requested number of
+        draws.
         @param numDraws
             Number of draws the indirect buffer is expected to hold. It must be an upper limit.
             The caller may end up using less draws if he desires.
         @return
             Pointer to usable indirect buffer
         */
-        IndirectBufferPacked* getIndirectBuffer( size_t numDraws );
+        IndirectBufferPacked *getIndirectBuffer( size_t numDraws );
 
         FORCEINLINE void addRenderable( size_t threadIdx, uint8 renderQueueId, bool casterPass,
-                                        Renderable* pRend, const MovableObject *pMovableObject,
+                                        Renderable *pRend, const MovableObject *pMovableObject,
                                         bool isV1 );
 
         void renderES2( RenderSystem *rs, bool casterPass, bool dualParaboloid,
-                        HlmsCache passCache[], const RenderQueueGroup &renderQueueGroup );
+                        HlmsCache passCache[HLMS_MAX], const RenderQueueGroup &renderQueueGroup );
+
+        uint8 *renderParticles( RenderSystem *rs, bool casterPass, HlmsCache passCache[],
+                                const RenderQueueGroup   &renderQueueGroup,
+                                ParallelHlmsCompileQueue *parallelCompileQueue,
+                                IndirectBufferPacked *indirectBuffer, uint8 *indirectDraw,
+                                uint8 *startIndirectDraw );
 
         /// Renders in a compatible way with GL 3.3 and D3D11. Can only render V2 objects
         /// (i.e. Items, VertexArrayObject)
         unsigned char *renderGL3( RenderSystem *rs, bool casterPass, bool dualParaboloid,
                                   HlmsCache passCache[], const RenderQueueGroup &renderQueueGroup,
+                                  ParallelHlmsCompileQueue *parallelCompileQueue,
                                   IndirectBufferPacked *indirectBuffer, unsigned char *indirectDraw,
                                   unsigned char *startIndirectDraw );
         void renderGL3V1( RenderSystem *rs, bool casterPass, bool dualParaboloid, HlmsCache passCache[],
-                          const RenderQueueGroup &renderQueueGroup );
+                          const RenderQueueGroup   &renderQueueGroup,
+                          ParallelHlmsCompileQueue *parallelCompileQueue );
+
+        void warmUpShaders( bool casterPass, const RenderQueueGroup &renderQueueGroup );
 
     public:
         RenderQueue( HlmsManager *hlmsManager, SceneManager *sceneManager, VaoManager *vaoManager );
         ~RenderQueue();
+
+        void _releaseManualHardwareResources();
 
         /// Empty the queue - should only be called by SceneManagers.
         void clear();
@@ -212,7 +341,7 @@ namespace Ogre {
         void clearState();
 
         /// Add a renderable (Ogre v1.x) object to the queue. @see addRenderable
-        void addRenderableV1( uint8 renderQueueId, bool casterPass, Renderable* pRend,
+        void addRenderableV1( uint8 renderQueueId, bool casterPass, Renderable *pRend,
                               const MovableObject *pMovableObject );
 
         /** Add a renderable (Ogre v2.0, i.e. Items; they use VAOs) object to the queue.
@@ -234,8 +363,8 @@ namespace Ogre {
         @param pMovableObject
             Pointer to the MovableObject linked to the Renderable.
         */
-        void addRenderableV2( size_t threadIdx, uint8 renderQueueId, bool casterPass,
-                              Renderable* pRend, const MovableObject *pMovableObject );
+        void addRenderableV2( size_t threadIdx, uint8 renderQueueId, bool casterPass, Renderable *pRend,
+                              const MovableObject *pMovableObject );
 
         /** If you need to call RenderQueue::render, then you must call this function.
             This function MUST be called (all listed functions are called in this order):
@@ -262,23 +391,36 @@ namespace Ogre {
         */
         void renderPassPrepare( bool casterPass, bool dualParaboloid );
 
-        void render( RenderSystem *rs, uint8 firstRq, uint8 lastRq,
-                     bool casterPass, bool dualParaboloid );
+        void render( RenderSystem *rs, uint8 firstRq, uint8 lastRq, bool casterPass,
+                     bool dualParaboloid );
+
+        /** Simulates what render() would do. But doesn't actually render and skips as much as possible
+            We are only interested in generating the PSOs for compiling them early.
+        @param firstRq
+        @param lastRq
+        @param casterPass
+        */
+        void warmUpShadersCollect( uint8 firstRq, uint8 lastRq, bool casterPass );
+        void warmUpShadersTrigger( RenderSystem *rs, bool casterPass );
+
+        void _warmUpShadersThread( size_t threadIdx );
+
+        void _compileShadersThread( size_t threadIdx );
 
         /// Don't call this too often. Only renders v1 objects at the moment.
-        void renderSingleObject( Renderable* pRend, const MovableObject *pMovableObject,
+        void renderSingleObject( Renderable *pRend, const MovableObject *pMovableObject,
                                  RenderSystem *rs, bool casterPass, bool dualParaboloid );
 
         /// Called when the frame has fully ended (ALL passes have been executed to all RTTs)
         void frameEnded();
-		
+
         /** Sets the mode for the RenderQueue ID. @see RenderQueue::Modes
         @param rqId
             ID of the render queue
         @param newMode
             The new mode to use.
         */
-        void setRenderQueueMode( uint8 rqId, RenderQueue::Modes newMode );
+        void               setRenderQueueMode( uint8 rqId, RenderQueue::Modes newMode );
         RenderQueue::Modes getRenderQueueMode( uint8 rqId ) const;
 
         /** Sets whether we should sort the render queue ID every frame.
@@ -290,11 +432,11 @@ namespace Ogre {
             or when you have a deep CPU bottleneck where the time taken to
             sort hurts more than it is supposed to help.
         */
-        void setSortRenderQueue( uint8 rqId, RqSortMode sortMode );
+        void       setSortRenderQueue( uint8 rqId, RqSortMode sortMode );
         RqSortMode getSortRenderQueue( uint8 rqId ) const;
     };
 
-    #define OGRE_RQ_MAKE_MASK( x ) ( (1 << (x)) - 1 )
+#define OGRE_RQ_MAKE_MASK( x ) ( ( 1 << ( x ) ) - 1 )
 
     class _OgreExport RqBits
     {
@@ -325,7 +467,7 @@ namespace Ogre {
     /** @} */
     /** @} */
 
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

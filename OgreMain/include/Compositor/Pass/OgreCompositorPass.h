@@ -29,40 +29,36 @@ THE SOFTWARE.
 #ifndef __CompositorPass_H__
 #define __CompositorPass_H__
 
-#include "OgreHeaderPrefix.h"
-
 #include "Compositor/Pass/OgreCompositorPassDef.h"
 #include "OgrePixelFormatGpu.h"
 
 #include "ogrestd/map.h"
 
+#include "OgreHeaderPrefix.h"
+
 namespace Ogre
 {
     class RenderTarget;
-    typedef TextureGpu* CompositorChannel;
+    typedef TextureGpu *CompositorChannel;
     class CompositorNode;
     struct RenderTargetViewDef;
     struct RenderTargetViewEntry;
-    typedef vector<TextureGpu*>::type TextureGpuVec;
+    typedef vector<TextureGpu *>::type TextureGpuVec;
 
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Effects
-    *  @{
-    */
+     *  @{
+     */
     struct CompositorTexture
     {
         IdString    name;
-        TextureGpu  *texture;
+        TextureGpu *texture;
 
-        CompositorTexture( IdString _name, TextureGpu *_texture ) :
-                name( _name ), texture( _texture ) {}
+        CompositorTexture( IdString _name, TextureGpu *_texture ) : name( _name ), texture( _texture ) {}
 
-        bool operator == ( IdString right ) const
-        {
-            return name == right;
-        }
+        bool operator==( IdString right ) const { return name == right; }
     };
 
     typedef vector<CompositorTexture>::type CompositorTextureVec;
@@ -77,29 +73,29 @@ namespace Ogre
     @version
         1.0
     */
-    class _OgreExport CompositorPass : public CompositorInstAlloc
+    class _OgreExport CompositorPass : public OgreAllocatedObj
     {
         CompositorPassDef const *mDefinition;
+
     protected:
         static const Quaternion CubemapRotations[6];
 
-        RenderPassDescriptor    *mRenderPassDesc;
-        /// Contains the first valid texture in mRenderPassDesc, to be used for reference
-        /// (e.g. width, height, etc). Could be colour, depth, stencil, or nullptr.
-        TextureGpu              *mAnyTargetTexture;
-        uint8                   mAnyMipLevel;
+        RenderPassDescriptor *mRenderPassDesc;
+        /// See getAnyTargetTexture().
+        TextureGpu *mAnyTargetTexture;
+        uint8       mAnyMipLevel;
 
-        uint32          mNumPassesLeft;
+        uint32 mNumPassesLeft;
 
-        CompositorNode  *mParentNode;
+        CompositorNode *mParentNode;
 
-        CompositorTextureVec    mTextureDependencies;
+        CompositorTextureVec mTextureDependencies;
 
-        BarrierSolver &mBarrierSolver;
+        BarrierSolver          &mBarrierSolver;
         ResourceTransitionArray mResourceTransitions;
 
         /// MUST be called by derived class.
-        void initialize( const RenderTargetViewDef *rtv, bool supportsNoRtv=false );
+        void initialize( const RenderTargetViewDef *rtv, bool supportsNoRtv = false );
 
         /// Modifies mRenderPassDesc
         void setupRenderPassDesc( const RenderTargetViewDef *rtv );
@@ -111,11 +107,10 @@ namespace Ogre
             a depth buffer in the same depth pool (unless the depth buffer is
             explicit)
         */
-        void setupRenderPassTarget( RenderPassTargetBase *renderPassTargetAttachment,
-                                    const RenderTargetViewEntry &rtvEntry,
-                                    bool isColourAttachment,
-                                    TextureGpu *linkedColourAttachment=0, uint16 depthBufferId = 0,
-                                    bool preferDepthTexture = false,
+        void setupRenderPassTarget( RenderPassTargetBase        *renderPassTargetAttachment,
+                                    const RenderTargetViewEntry &rtvEntry, bool isColourAttachment,
+                                    TextureGpu *linkedColourAttachment = 0, uint16 depthBufferId = 0,
+                                    bool           preferDepthTexture = false,
                                     PixelFormatGpu depthBufferFormat = PFG_UNKNOWN );
 
         virtual bool allowResolveStoreActionsWithoutResolveTexture() const { return false; }
@@ -166,41 +161,44 @@ namespace Ogre
 
         virtual void execute( const Camera *lodCameraconst ) = 0;
 
-        /// @See CompositorNode::notifyRecreated
+        /// @see CompositorNode::notifyRecreated
         virtual bool notifyRecreated( const TextureGpu *channel );
         virtual void notifyRecreated( const UavBufferPacked *oldBuffer, UavBufferPacked *newBuffer );
 
-        /// @See CompositorNode::notifyDestroyed
+        /// @see CompositorNode::notifyDestroyed
         virtual void notifyDestroyed( TextureGpu *channel );
         virtual void notifyDestroyed( const UavBufferPacked *buffer );
 
-        /// @See CompositorNode::_notifyCleared
+        /// @see CompositorNode::_notifyCleared
         virtual void notifyCleared();
 
         virtual void resetNumPassesLeft();
 
+        Real getViewportAspectRatio( size_t vpIdx );
+
         Vector2 getActualDimensions() const;
 
-        CompositorPassType getType() const  { return mDefinition->getType(); }
+        CompositorPassType getType() const { return mDefinition->getType(); }
 
-        RenderPassDescriptor* getRenderPassDesc() const { return mRenderPassDesc; }
+        RenderPassDescriptor *getRenderPassDesc() const { return mRenderPassDesc; }
 
-        const CompositorPassDef* getDefinition() const  { return mDefinition; }
+        const CompositorPassDef *getDefinition() const { return mDefinition; }
 
-		const CompositorNode* getParentNode() const		{ return mParentNode; }
+        const CompositorNode *getParentNode() const { return mParentNode; }
 
-        const ResourceTransitionArray &getResourceTransitions() const
-        {
-            return mResourceTransitions;
-        }
-        ResourceTransitionArray &_getResourceTransitionsNonConst() { return mResourceTransitions; }
+        /// Contains the first valid texture in mRenderPassDesc, to be used for reference
+        /// (e.g. width, height, etc). Could be colour, depth, stencil, or nullptr.
+        const TextureGpu *getAnyTargetTexture() const { return mAnyTargetTexture; }
 
-        const CompositorTextureVec& getTextureDependencies() const  { return mTextureDependencies; }
+        const ResourceTransitionArray &getResourceTransitions() const { return mResourceTransitions; }
+        ResourceTransitionArray       &_getResourceTransitionsNonConst() { return mResourceTransitions; }
+
+        const CompositorTextureVec &getTextureDependencies() const { return mTextureDependencies; }
     };
 
     /** @} */
     /** @} */
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

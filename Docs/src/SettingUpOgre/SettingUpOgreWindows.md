@@ -5,8 +5,7 @@
 # Requirements {#RequirementsWindows}
     * [CMake 3.x](https://cmake.org/download/)
     * Git
-    * What you do **NOT** need: Boost. Don't waste your time.
-    * Visual Studio 2008 SP1 - 2017 (2019 not tested). MinGW may work but we strongly recommend Visual Studio.
+    * Visual Studio 2015 - 2022. MinGW may work but we strongly recommend Visual Studio.
     * [DirectX June 2010 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=6812). Optional.
       Needed if you use older Visual Studio versions and want the D3D11 plugin. Also comes with useful tools.
     * Windows 10 SDK. Contains the latest DirectX SDK, thus recommended over the DX June 2010 SDK,
@@ -14,6 +13,7 @@
     * Windows 7 or higher is highly recommended. For Windows Vista & 7, you need to have the
       [KB2670838 update](https://support.microsoft.com/en-us/kb/2670838) installed.
       **YOUR END USERS NEED THIS UPDATE AS WELL**.
+    * Python 3.x is needed to build shaderc dependency for Vulkan.
     * For HW & SW requirements, please visit http://www.ogre3d.org/developers/requirements
 
 @copydoc DownloadingOgreScriptsCommon
@@ -28,7 +28,7 @@
 -# Open CMake GUI.
 -# Point "Where is the source code" to C:\\OgreDepsRepo\\; and
    "Where to build the binaries" pointing to "C:\\OgreDepsRepo\\build"
--# Click 'Configure' and select the generator (i.e. if you're using Visual Studio 2013, select Visual Studio 12)
+-# Click 'Configure' and select the generator (i.e. if you're using Visual Studio 2015, select Visual Studio 14)
 ![](images/CMakeWindowsDependencies.png)
 -# Answer 'Ok' when asked if you want to create the build directory
 -# Sometimes on bleeding edge repos there might be CMake syntax warnings. Ignore them.
@@ -89,14 +89,18 @@ https://www.ogre3d.org/download/sdk/sdk-ogre-next
 @addtogroup DownloadingOgreCommon
 @ingroup MdInternal
 @{
-Most dependencies are conveniently stored in its own repository called "ogredeps" for you to download.
+Ogre Next source is located at [Github/OGRECave/ogre-next](https://github.com/OGRECave/ogre-next)
+
+Ogre Next dependencies are located at [Github/OGRECave/ogre-next-deps](https://github.com/OGRECave/ogre-next-deps)
+
+Download the source code or you can fork it to your own repository and clone it locally with [Github Desktop](https://desktop.github.com/) or the command line.
 
 **IMPORTANT:** Do NOT use the the "Download" feature from Github. It will not follow subrepositories.
 
 **Command line**:
 ```sh
 git clone --recurse-submodules --shallow-submodules https://github.com/OGRECave/ogre-next-deps
-git clone --branch v2-2 https://github.com/OGRECave/ogre-next
+git clone --branch master https://github.com/OGRECave/ogre-next
 ```
 @}
 

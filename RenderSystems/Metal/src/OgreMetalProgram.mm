@@ -86,7 +86,7 @@ namespace Ogre
         mLibrary = nil;
         mFunction = nil;
 
-        // Have to call this here reather than in Resource destructor
+        // Have to call this here rather than in Resource destructor
         // since calling virtual methods in base destructors causes crash
         if( isLoaded() )
         {
@@ -137,10 +137,10 @@ namespace Ogre
                     }
                     String tmpStr;
                     tmpStr = mPreprocessorDefines.substr( macro_name_start, macro_name_len );
-                    NSString *key = [NSString stringWithUTF8String:tmpStr.c_str()];
+                    NSString *key = @( tmpStr.c_str() );
 
                     tmpStr = mPreprocessorDefines.substr( macro_val_start, macro_val_len );
-                    NSString *value = [NSString stringWithUTF8String:tmpStr.c_str()];
+                    NSString *value = @( tmpStr.c_str() );
                     inOutMacros[key] = value;
                 }
                 else
@@ -150,7 +150,7 @@ namespace Ogre
 
                     String tmpStr;
                     tmpStr = mPreprocessorDefines.substr( macro_name_start, macro_name_len );
-                    NSString *key = [NSString stringWithUTF8String:tmpStr.c_str()];
+                    NSString *key = @( tmpStr.c_str() );
                     inOutMacros[key] = [NSNumber numberWithUnsignedInt:1];
                 }
             }
@@ -215,7 +215,7 @@ namespace Ogre
 #endif
 
         NSError *error;
-        mLibrary = [mDevice->mDevice newLibraryWithSource:[NSString stringWithUTF8String:mSource.c_str()]
+        mLibrary = [mDevice->mDevice newLibraryWithSource:@( mSource.c_str() )
                                                   options:options
                                                     error:&error];
 
@@ -223,7 +223,7 @@ namespace Ogre
         {
             String errorDesc;
             if( error )
-                errorDesc = [error localizedDescription].UTF8String;
+                errorDesc = error.localizedDescription.UTF8String;
 
             LogManager::getSingleton().logMessage( "Metal SL Compiler Error in " + mName + ":\n" +
                                                    errorDesc );
@@ -236,19 +236,19 @@ namespace Ogre
             {
                 String errorDesc;
                 if( error )
-                    errorDesc = [error localizedDescription].UTF8String;
+                    errorDesc = error.localizedDescription.UTF8String;
                 LogManager::getSingleton().logMessage( "Metal SL Compiler Warnings in " + mName + ":\n" +
                                                        errorDesc );
             }
         }
 
-        mLibrary.label = [NSString stringWithUTF8String:mName.c_str()];
+        mLibrary.label = @( mName.c_str() );
 
-        mFunction = [mLibrary newFunctionWithName:[NSString stringWithUTF8String:mEntryPoint.c_str()]];
+        mFunction = [mLibrary newFunctionWithName:@( mEntryPoint.c_str() )];
         if( !mFunction )
         {
             mCompiled = false;
-            LogManager::getSingleton().logMessage( "Error retriving entry point '" + mEntryPoint +
+            LogManager::getSingleton().logMessage( "Error retrieving entry point '" + mEntryPoint +
                                                    "' in shader " + mName );
         }
 
@@ -310,7 +310,7 @@ namespace Ogre
         {
             String errorDesc;
             if( error )
-                errorDesc = [error localizedDescription].UTF8String;
+                errorDesc = error.localizedDescription.UTF8String;
 
             mCompileError = true;
 
@@ -349,7 +349,7 @@ namespace Ogre
         {
             GpuProgramPtr shader =
                 GpuProgramManager::getSingleton().getByName( mShaderReflectionPairHint );
-            if( shader.isNull() )
+            if( !shader )
             {
                 mCompileError = true;
                 OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
@@ -371,10 +371,17 @@ namespace Ogre
             if( shader->hasCompileError() )
             {
                 mCompileError = true;
-                OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS,
-                             "Shader reflection hint '" + mShaderReflectionPairHint +
-                                 "' for pixel shader '" + mName + "' had a compiler error.",
-                             "MetalProgram::analyzeRenderParameters" );
+
+                // Cannot be an exception because this failure can be GPU-specific;
+                // which will cause an app to crash only on specific devices
+                // Only always-repeatable errors should be exceptions in this routine
+                //
+                // See https://github.com/OGRECave/ogre-next/issues/251
+                LogManager::getSingleton().logMessage(
+                    "Shader reflection hint '" + mShaderReflectionPairHint + "' for pixel shader '" +
+                        mName + "' had a compiler error.",
+                    LML_CRITICAL );
+                return;
             }
 
             assert( dynamic_cast<MetalProgram *>( shader->_getBindingDelegate() ) );
@@ -402,13 +409,18 @@ namespace Ogre
         {
             String errorDesc;
             if( error )
-                errorDesc = [error localizedDescription].UTF8String;
+                errorDesc = error.localizedDescription.UTF8String;
 
             mCompileError = true;
 
-            OGRE_EXCEPT( Exception::ERR_RENDERINGAPI_ERROR,
-                         "Failed to create pipeline state for reflection, error " + errorDesc,
-                         "MetalProgram::analyzeRenderParameters" );
+            // Cannot be an exception because this failure can be GPU-specific;
+            // which will cause an app to crash only on specific devices.
+            // Only always-repeatable errors should be exceptions in this routine
+            //
+            // See https://github.com/OGRECave/ogre-next/issues/251
+            LogManager::getSingleton().logMessage(
+                "Failed to create pipeline state for reflection for " + mName + ", error " + errorDesc,
+                LML_CRITICAL );
         }
         else
         {
@@ -483,7 +495,7 @@ namespace Ogre
 
                 mConstantsBytesToWrite = std::max<uint32>(
                     mConstantsBytesToWrite,
-                    def.logicalIndex + def.arraySize * def.elementSize * sizeof( float ) );
+                    uint32( def.logicalIndex + def.arraySize * def.elementSize * sizeof( float ) ) );
             }
         }
 
@@ -555,7 +567,7 @@ namespace Ogre
 
                 mConstantsBytesToWrite = std::max<uint32>(
                     mConstantsBytesToWrite,
-                    def.logicalIndex + def.arraySize * def.elementSize * sizeof( float ) );
+                    uint32( def.logicalIndex + def.arraySize * def.elementSize * sizeof( float ) ) );
 
                 if( member.dataType == MTLDataTypeArray )
                 {
@@ -568,7 +580,7 @@ namespace Ogre
     //-----------------------------------------------------------------------
     void MetalProgram::createLowLevelImpl()
     {
-        mAssemblerProgram = GpuProgramPtr( this, SPFM_NONE );
+        mAssemblerProgram = GpuProgramPtr( this, []( GpuProgram * ) {} );
         if( !mCompiled )
             compile( true );
     }
@@ -578,7 +590,7 @@ namespace Ogre
         // We didn't create mAssemblerProgram through a manager, so override this
         // implementation so that we don't try to remove it from one. Since getCreator()
         // is used, it might target a different matching handle!
-        mAssemblerProgram.setNull();
+        mAssemblerProgram.reset();
 
         unloadHighLevel();
     }
@@ -649,13 +661,22 @@ namespace Ogre
         {
             const GpuConstantDefinition &def = *itor;
 
-            void *RESTRICT_ALIAS src;
+            void const *RESTRICT_ALIAS src;
             if( def.isFloat() )
-                src = (void *)&( *( params->getFloatConstantList().begin() + def.physicalIndex ) );
+            {
+                src = (void const *)&( *( params->getFloatConstantList().begin() +
+                                          static_cast<ptrdiff_t>( def.physicalIndex ) ) );
+            }
             else if( def.isUnsignedInt() )
-                src = (void *)&( *( params->getUnsignedIntConstantList().begin() + def.physicalIndex ) );
+            {
+                src = (void const *)&( *( params->getUnsignedIntConstantList().begin() +
+                                          static_cast<ptrdiff_t>( def.physicalIndex ) ) );
+            }
             else
-                src = (void *)&( *( params->getIntConstantList().begin() + def.physicalIndex ) );
+            {
+                src = (void const *)&( *( params->getIntConstantList().begin() +
+                                          static_cast<ptrdiff_t>( def.physicalIndex ) ) );
+            }
 
             memcpy( &dstData[def.logicalIndex], src, def.elementSize * def.arraySize * sizeof( float ) );
 
@@ -724,4 +745,4 @@ namespace Ogre
         return params;
     }
     //-----------------------------------------------------------------------
-}
+}  // namespace Ogre

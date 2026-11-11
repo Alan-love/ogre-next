@@ -9,29 +9,46 @@ namespace Demo
 {
     class PbsMaterialsGameState : public TutorialGameState
     {
-        Ogre::SceneNode     *mSceneNode[16];
+        enum BrdfDiffuseFresnelMode
+        {
+            NoDiffuseFresnel,
+            WithDiffuseFresnel,
+            SeparateDiffuseFresnel,
+            NumBrdfDiffuseFresnelModes
+        };
 
-        Ogre::SceneNode     *mLightNodes[3];
+        Ogre::SceneNode *mSceneNode[16];
 
-        bool                mAnimateObjects;
+        Ogre::SceneNode *mLightNodes[3];
 
-        size_t          mNumSpheres;
-        Ogre::uint8     mTransparencyMode;
-        float           mTransparencyValue;
+        bool mAnimateObjects;
 
-        virtual void generateDebugText( float timeSinceLast, Ogre::String &outText );
+        size_t mNumSpheres;
+        float mTransparencyValue;
+        Ogre::uint8 mTransparencyMode;
+
+        uint8_t mBrdfIdx;
+        BrdfDiffuseFresnelMode mBrdfDiffuseFresnelMode;
+
+        void generateDebugText( float timeSinceLast, Ogre::String &outText ) override;
 
         void setTransparencyToMaterials();
+
+        bool currentBrdfSupportsDiffuseFresnel() const;
+
+        uint32_t getBrdf() const;
+
+        void setBrdfToMaterials();
 
     public:
         PbsMaterialsGameState( const Ogre::String &helpDescription );
 
-        virtual void createScene01();
+        void createScene01() override;
 
-        virtual void update( float timeSinceLast );
+        void update( float timeSinceLast ) override;
 
-        virtual void keyReleased( const SDL_KeyboardEvent &arg );
+        void keyReleased( const SDL_KeyboardEvent &arg ) override;
     };
-}
+}  // namespace Demo
 
 #endif

@@ -42,7 +42,7 @@ namespace Ogre
     {
     protected:
         static String sLanguageName;
-        MetalDevice * mDevice;
+        MetalDevice  *mDevice;
 
     public:
         MetalProgramFactory( MetalDevice *device );
@@ -58,6 +58,6 @@ namespace Ogre
 
         void destroy( HighLevelGpuProgram *prog ) override;
     };
-}
+}  // namespace Ogre
 
 #endif  // __MetalProgramFactory_H__

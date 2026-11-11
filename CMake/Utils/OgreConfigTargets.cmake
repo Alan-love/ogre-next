@@ -13,7 +13,8 @@ if(APPLE)
     set_property( TARGET ${targ} PROPERTY XCODE_ATTRIBUTE_${xc_prop_name} ${xc_prop_val} )
   endmacro(set_xcode_property)
 
-  set(MIN_IOS_VERSION "9.0")
+  set(MIN_IOS_VERSION "15.0")
+  set(MIN_MACOS_VERSION "12.0")
 
   if(NOT OGRE_BUILD_PLATFORM_ANDROID AND NOT OGRE_BUILD_PLATFORM_APPLE_IOS)
     set(PLATFORM_NAME "macosx")
@@ -67,9 +68,9 @@ elseif (UNIX)
   if (APPLE)
     set(OGRE_PLUGIN_PATH "/")
   else()
-    set(OGRE_PLUGIN_PATH "/OGRE")
+    set(OGRE_PLUGIN_PATH "/${OGRE_NEXT_PREFIX}")
   endif(APPLE)
-  set(OGRE_SAMPLE_PATH "/OGRE/Samples")
+  set(OGRE_SAMPLE_PATH "/${OGRE_NEXT_PREFIX}/Samples")
 endif ()
 
 # create vcproj.user file for Visual Studio to set debug working directory
@@ -92,8 +93,10 @@ endfunction(ogre_create_vcproj_userfile)
 function(ogre_install_target TARGETNAME SUFFIX EXPORT)
 	# Skip all install targets in SDK
 	if (OGRE_SDK_BUILD)
-		return()
+	  return()
 	endif()
+
+	message(STATUS "Installing target: ${TARGETNAME} ${SUFFIX} ${EXPORT}")
 
 	if(EXPORT)
 	  install(TARGETS ${TARGETNAME} #EXPORT Ogre-exports
@@ -155,7 +158,6 @@ function(ogre_install_target TARGETNAME SUFFIX EXPORT)
 		FRAMEWORK DESTINATION "${OGRE_LIB_DIRECTORY}${OGRE_DEBUG_PATH}/Debug" CONFIGURATIONS Debug
 	  )
 	endif()
-
 endfunction(ogre_install_target)
 
 # setup common target settings
@@ -167,12 +169,14 @@ function(ogre_config_common TARGETNAME)
   )
   if(OGRE_BUILD_PLATFORM_APPLE_IOS)
     set_xcode_property( ${TARGETNAME} IPHONEOS_DEPLOYMENT_TARGET ${MIN_IOS_VERSION} )
-	set_property( TARGET ${TARGETNAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "9.0" )
+    set_property( TARGET ${TARGETNAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "${MIN_IOS_VERSION}" )
     set_target_properties(${TARGETNAME} PROPERTIES XCODE_ATTRIBUTE_GCC_THUMB_SUPPORT "NO")
     set_target_properties(${TARGETNAME} PROPERTIES XCODE_ATTRIBUTE_GCC_UNROLL_LOOPS "YES")
     set_target_properties(${TARGETNAME} PROPERTIES XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "iPhone Developer")
     set_target_properties(${TARGETNAME} PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER "YES")
     set_target_properties( ${TARGETNAME} PROPERTIES XCODE_ATTRIBUTE_VALID_ARCHS "arm64" )
+  elseif(APPLE)
+    set_xcode_property( ${TARGETNAME} MACOSX_DEPLOYMENT_TARGET ${MIN_MACOS_VERSION} )
   endif(OGRE_BUILD_PLATFORM_APPLE_IOS)
 
   set_target_properties(${TARGETNAME} PROPERTIES XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "NO")
@@ -201,22 +205,13 @@ function(ogre_config_lib LIBNAME EXPORT)
   
   if(OGRE_BUILD_PLATFORM_APPLE_IOS)
     set_xcode_property( ${LIBNAME} IPHONEOS_DEPLOYMENT_TARGET ${MIN_IOS_VERSION} )
-	set_property( TARGET ${LIBNAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "9.0" )
+    set_property( TARGET ${LIBNAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "${MIN_IOS_VERSION}" )
   endif()
 
   if (OGRE_INSTALL_PDB)
     # install debug pdb files
 	# Static libs don't have PDBs
 	if (NOT OGRE_STATIC)
-#	  install(FILES ${OGRE_BINARY_DIR}/lib${OGRE_LIB_DEBUG_PATH}/${LIBNAME}Static_d.pdb
-#	    DESTINATION ${OGRE_LIB_DIRECTORY}${OGRE_LIB_DEBUG_PATH}
-#		CONFIGURATIONS Debug
-#	  )
-#	  install(FILES ${OGRE_BINARY_DIR}/lib${OGRE_LIB_RELWDBG_PATH}/${LIBNAME}Static.pdb
-#	    DESTINATION ${OGRE_LIB_DIRECTORY}${OGRE_LIB_RELWDBG_PATH}
-#		CONFIGURATIONS RelWithDebInfo
-#	  )
-#	else ()
 	  install(FILES ${OGRE_BINARY_DIR}/bin${OGRE_DEBUG_PATH}/${LIBNAME}_d.pdb
 	    DESTINATION bin${OGRE_DEBUG_PATH}
 		CONFIGURATIONS Debug
@@ -263,7 +258,7 @@ function(ogre_config_plugin PLUGINNAME)
 
     if(OGRE_BUILD_PLATFORM_APPLE_IOS)
       set_xcode_property( ${PLUGINNAME} IPHONEOS_DEPLOYMENT_TARGET ${MIN_IOS_VERSION} )
-	  set_property( TARGET ${PLUGINNAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "9.0" )
+      set_property( TARGET ${PLUGINNAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "${MIN_IOS_VERSION}" )
       set_target_properties(${PLUGINNAME} PROPERTIES XCODE_ATTRIBUTE_GCC_THUMB_SUPPORT "NO")
       set_target_properties(${PLUGINNAME} PROPERTIES XCODE_ATTRIBUTE_GCC_UNROLL_LOOPS "YES")
       set_target_properties(${PLUGINNAME} PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER "YES")
@@ -281,15 +276,6 @@ function(ogre_config_plugin PLUGINNAME)
     # install debug pdb files
 	# Static libs don't have PDBs
 	if (NOT OGRE_STATIC)
-#	  install(FILES ${OGRE_BINARY_DIR}/lib${OGRE_LIB_DEBUG_PATH}/${PLUGINNAME}Static_d.pdb
-#	    DESTINATION ${OGRE_LIB_DIRECTORY}${OGRE_LIB_DEBUG_PATH}/opt
-#		CONFIGURATIONS Debug
-#	  )
-#	  install(FILES ${OGRE_BINARY_DIR}/lib${OGRE_LIB_RELWDBG_PATH}/${PLUGINNAME}Static.pdb
-#	    DESTINATION ${OGRE_LIB_DIRECTORY}${OGRE_LIB_RELWDBG_PATH}/opt
-#		CONFIGURATIONS RelWithDebInfo
-#	  )
-#	else ()
 	  install(FILES ${OGRE_BINARY_DIR}/bin${OGRE_DEBUG_PATH}/${PLUGINNAME}_d.pdb
 	    DESTINATION bin${OGRE_DEBUG_PATH}
 		CONFIGURATIONS Debug
@@ -326,7 +312,7 @@ function(ogre_config_sample_common SAMPLENAME)
       endif()
     else()
       set_xcode_property( ${SAMPLENAME} IPHONEOS_DEPLOYMENT_TARGET ${MIN_IOS_VERSION} )
-	  set_property( TARGET ${SAMPLENAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "9.0" )
+      set_property( TARGET ${SAMPLENAME} PROPERTY XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET[arch=arm64] "${MIN_IOS_VERSION}" )
     endif()
   endif (APPLE AND OGRE_BUILD_SAMPLES_AS_BUNDLES)
   if (NOT OGRE_STATIC)

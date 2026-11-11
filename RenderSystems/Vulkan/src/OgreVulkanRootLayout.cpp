@@ -39,8 +39,16 @@ THE SOFTWARE.
 #include "OgreLwString.h"
 #include "OgreStringConverter.h"
 
+#if defined( __clang__ )
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wimplicit-int-float-conversion"
+#    pragma clang diagnostic ignored "-Wdeprecated-copy"
+#endif
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
+#if defined( __clang__ )
+#    pragma clang diagnostic pop
+#endif
 
 #include "vulkan/vulkan_core.h"
 
@@ -58,7 +66,13 @@ namespace Ogre
             // clang-format off
         case DescBindingTypes::ParamBuffer:       return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         case DescBindingTypes::ConstBuffer:       return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+#ifdef OGRE_VK_WORKAROUND_ADRENO_6xx_READONLY_IS_TBUFFER
+        case DescBindingTypes::ReadOnlyBuffer:    return Workarounds::mAdreno6xxReadOnlyIsTBuffer ?
+                                                            VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER :
+                                                            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+#else
         case DescBindingTypes::ReadOnlyBuffer:    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+#endif
         case DescBindingTypes::TexBuffer:         return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
         case DescBindingTypes::Texture:           return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
         case DescBindingTypes::Sampler:           return VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -86,6 +100,20 @@ namespace Ogre
             mRootLayout = 0;
         }
     }
+    //-------------------------------------------------------------------------
+    void VulkanRootLayout::notifyDeviceLost()
+    {
+        if( mRootLayout )
+        {
+            vkDestroyPipelineLayout( mProgramManager->getDevice()->mDevice, mRootLayout, 0 );
+            mRootLayout = 0;
+        }
+
+        mSets.resize( 0 );
+        mPools.resize( 0 );
+    }
+    //-------------------------------------------------------------------------
+    void VulkanRootLayout::notifyDeviceRestored( unsigned pass ) {}
     //-------------------------------------------------------------------------
     void VulkanRootLayout::copyFrom( const RootLayout &rootLayout, bool bIncludeArrayBindings )
     {
@@ -162,14 +190,14 @@ namespace Ogre
                             macroStr += textStr.c_str();
                         }
 
-                        const size_t numSlots = mDescBindingRanges[i][j].getNumUsedSlots();
+                        const uint32 numSlots = mDescBindingRanges[i][j].getNumUsedSlots();
                         bindingIdx += numSlots;
                     }
                 }
                 else
                 {
                     uint32 emulatedSlot = mDescBindingRanges[i][j].start;
-                    const size_t numSlots = mDescBindingRanges[i][j].getNumUsedSlots();
+                    const uint32 numSlots = mDescBindingRanges[i][j].getNumUsedSlots();
 
                     FastArray<uint32>::const_iterator arrayRangesEnd = mArrayRanges[j].end();
                     FastArray<uint32>::const_iterator arrayRanges =
@@ -223,8 +251,18 @@ namespace Ogre
     //-------------------------------------------------------------------------
     VkPipelineLayout VulkanRootLayout::createVulkanHandles()
     {
+        {
+            // If mRootLayout is nullptr but being created in another thread, we will check again
+            // but with a proper lock. If it's not a nullptr, it means it's properly been created.
+            VkPipelineLayout retVal = mRootLayout.load( std::memory_order_relaxed );
+            if( retVal )
+                return retVal;
+        }
+
+        ScopedLock lock( mProgramManager->getMutexRootLayoutHandles() );
+
         if( mRootLayout )
-            return mRootLayout;
+            return mRootLayout;  // Checking again as previous check was unsafe.
 
         FastArray<FastArray<VkDescriptorSetLayoutBinding> > rootLayoutDesc;
 
@@ -313,8 +351,12 @@ namespace Ogre
         pipelineLayoutCi.setLayoutCount = static_cast<uint32>( numSets );
         pipelineLayoutCi.pSetLayouts = mSets.begin();
 
-        VkResult result = vkCreatePipelineLayout( device->mDevice, &pipelineLayoutCi, 0, &mRootLayout );
-        checkVkResult( result, "vkCreatePipelineLayout" );
+        VkPipelineLayout rootLayoutResult;
+        VkResult result =
+            vkCreatePipelineLayout( device->mDevice, &pipelineLayoutCi, 0, &rootLayoutResult );
+        checkVkResult( device, result, "vkCreatePipelineLayout" );
+
+        mRootLayout.store( rootLayoutResult, std::memory_order_relaxed );
 
         return mRootLayout;
     }
@@ -330,7 +372,7 @@ namespace Ogre
         writeDescSet.dstBinding = currBinding;
         writeDescSet.dstArrayElement = 0u;
         writeDescSet.descriptorCount = static_cast<uint32_t>( bindRanges.getNumUsedSlots() );
-        currBinding += bindRanges.getNumUsedSlots() - arrayedSlots;
+        currBinding += uint32( bindRanges.getNumUsedSlots() - arrayedSlots );
         ++numWriteDescSets;
     }
     //-------------------------------------------------------------------------
@@ -409,8 +451,22 @@ namespace Ogre
         VkWriteDescriptorSet &writeDescSet = writeDescSets[numWriteDescSets];
         bindCommon( writeDescSet, numWriteDescSets, currBinding, descSet, bindRanges,
                     arrayedSlots[DescBindingTypes::ReadOnlyBuffer] );
+
+#ifdef OGRE_VK_WORKAROUND_ADRENO_6xx_READONLY_IS_TBUFFER
+        if( Workarounds::mAdreno6xxReadOnlyIsTBuffer )
+        {
+            writeDescSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+            writeDescSet.pTexelBufferView = &table.readOnlyBuffers2[bindRanges.start];
+        }
+        else
+        {
+            writeDescSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            writeDescSet.pBufferInfo = &table.readOnlyBuffers[bindRanges.start];
+        }
+#else
         writeDescSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         writeDescSet.pBufferInfo = &table.readOnlyBuffers[bindRanges.start];
+#endif
     }
     //-------------------------------------------------------------------------
     inline void VulkanRootLayout::bindTexBuffers( VkWriteDescriptorSet *writeDescSets,
@@ -492,13 +548,14 @@ namespace Ogre
             }
             else
             {
+                bDirty |= (int)table.dirtyBakedTextures &
+                          ( (int)ranges[DescBindingTypes::ReadOnlyBuffer].isInUse() |
+                            (int)ranges[DescBindingTypes::TexBuffer].isInUse() |
+                            (int)ranges[DescBindingTypes::Texture].isInUse() );
+                bDirty |= (int)table.dirtyBakedSamplers & ranges[DescBindingTypes::Sampler].isInUse();
                 bDirty |=
-                    table.dirtyBakedTextures & ( ranges[DescBindingTypes::ReadOnlyBuffer].isInUse() |
-                                                 ranges[DescBindingTypes::TexBuffer].isInUse() |
-                                                 ranges[DescBindingTypes::Texture].isInUse() );
-                bDirty |= table.dirtyBakedSamplers & ranges[DescBindingTypes::Sampler].isInUse();
-                bDirty |= table.dirtyBakedUavs & ( ranges[DescBindingTypes::UavBuffer].isInUse() |
-                                                   ranges[DescBindingTypes::UavTexture].isInUse() );
+                    (int)table.dirtyBakedUavs & ( (int)ranges[DescBindingTypes::UavBuffer].isInUse() |
+                                                  (int)ranges[DescBindingTypes::UavTexture].isInUse() );
             }
 
             if( bDirty )
@@ -532,7 +589,7 @@ namespace Ogre
             size_t numWriteDescSets = 0u;
             uint32 currBinding = 0u;
             // ParamBuffer consumes up to 1 per stage (not just 1)
-            VkWriteDescriptorSet writeDescSets[DescBindingTypes::Sampler + NumShaderTypes];
+            VkWriteDescriptorSet writeDescSets[DescBindingTypes::Sampler + uint32( NumShaderTypes )];
 
             // Note: We must bind in the same order as DescBindingTypes
             if( !mBaked[i] )
@@ -558,8 +615,11 @@ namespace Ogre
                         descBindingRanges[j + DescBindingTypes::ReadOnlyBuffer];
                     if( bindRanges.isInUse() )
                     {
-                        OGRE_ASSERT_MEDIUM( table.bakedDescriptorSets[j] &&
-                                            "No DescriptorSetTexture/Sampler/Uav bound when expected!" );
+                        OGRE_ASSERT_MEDIUM(
+                            table.bakedDescriptorSets[j] &&
+                            "No DescriptorSetTexture/Sampler/Uav bound when expected!\n"
+                            "Forgot a call to "
+                            "RenderSystem::_setTextures/_setTextures2/_setSamplers/etc?" );
                         OGRE_ASSERT_MEDIUM( table.bakedDescriptorSets[j]->descriptorCount ==
                                                 bindRanges.getNumUsedSlots() &&
                                             "DescriptorSetTexture/Sampler/Uav provided is incompatible "
@@ -586,7 +646,7 @@ namespace Ogre
         if( firstDirtySet < mSets.size() )
         {
             vkCmdBindDescriptorSets(
-                device->mGraphicsQueue.mCurrentCmdBuffer,
+                device->mGraphicsQueue.getCurrentCmdBuffer(),
                 mCompute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS, mRootLayout,
                 firstDirtySet, static_cast<uint32_t>( mSets.size() ) - firstDirtySet,
                 &descSets[firstDirtySet], 0u, 0 );

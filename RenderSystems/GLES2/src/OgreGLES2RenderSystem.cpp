@@ -1181,7 +1181,7 @@ namespace Ogre {
 #endif
     }
 
-    void GLES2RenderSystem::_hlmsPipelineStateObjectCreated( HlmsPso *newBlock )
+    bool GLES2RenderSystem::_hlmsPipelineStateObjectCreated( HlmsPso *newBlock, uint64 deadline )
     {
         GLES2HlmsPso *pso = new GLES2HlmsPso();
         memset( pso, 0, sizeof(GLES2HlmsPso) );
@@ -1245,18 +1245,19 @@ namespace Ogre {
         // Shader stuff
         //
 
-        if( !newBlock->vertexShader.isNull() )
+        if( newBlock->vertexShader )
         {
             pso->vertexShader = static_cast<GLSLESShader*>( newBlock->vertexShader->
                                                           _getBindingDelegate() );
         }
-        if( !newBlock->pixelShader.isNull() )
+        if( newBlock->pixelShader )
         {
             pso->pixelShader = static_cast<GLSLESShader*>( newBlock->pixelShader->
                                                          _getBindingDelegate() );
         }
         
         newBlock->rsData = pso;
+        return true;
     }
 
     void GLES2RenderSystem::_hlmsPipelineStateObjectDestroyed( HlmsPso *pso )
@@ -1841,7 +1842,7 @@ namespace Ogre {
 
         if(hasMinGLVersion(3, 0) || checkExtension("GL_EXT_instanced_arrays"))
         {
-            if( !globalInstanceVertexBuffer.isNull() && globalVertexDeclaration != NULL )
+            if( globalInstanceVertexBuffer && globalVertexDeclaration )
             {
                 elemEnd = globalVertexDeclaration->getElements().end();
                 for (elemIter = globalVertexDeclaration->getElements().begin(); elemIter != elemEnd; ++elemIter)

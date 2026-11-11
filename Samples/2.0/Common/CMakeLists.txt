@@ -40,9 +40,14 @@ ogre_add_component_include_dir(Hlms/Pbs)
 ogre_add_component_include_dir(Hlms/Unlit)
 ogre_add_component_include_dir(Hlms/Common)
 
+if( OGRE_BUILD_COMPONENT_ATMOSPHERE )
+	ogre_add_component_include_dir(Atmosphere)
+endif()
+
 if( OGRE_STATIC )
 	# Static linking means we need to directly use plugins
-	#include_directories(${OGRE_SOURCE_DIR}/PlugIns/ParticleFX/include)
+	include_directories( ${OGRE_SOURCE_DIR}/PlugIns/ParticleFX/include )
+	include_directories( ${OGRE_SOURCE_DIR}/PlugIns/ParticleFX2/include )
 	include_directories( ${OGRE_SOURCE_DIR}/RenderSystems/Direct3D11/include )
 	include_directories( ${OGRE_SOURCE_DIR}/RenderSystems/GL3Plus/include )
 	include_directories( ${OGRE_SOURCE_DIR}/RenderSystems/GL3Plus/include/GLSL )
@@ -55,4 +60,7 @@ add_library(${OGRE_SAMPLES_COMMON_LIBRARY} STATIC ${SOURCE_FILES} ${HEADER_FILES
 
 link_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(${OGRE_SAMPLES_COMMON_LIBRARY} ${SDL2_LIBRARY} OgreHlmsPbs OgreHlmsUnlit)
+target_link_libraries(${OGRE_SAMPLES_COMMON_LIBRARY} ${SDL2_LIBRARY} ${OGRE_NEXT}HlmsPbs ${OGRE_NEXT}HlmsUnlit)
+if( OGRE_BUILD_COMPONENT_ATMOSPHERE )
+	target_link_libraries(${OGRE_SAMPLES_COMMON_LIBRARY} ${OGRE_NEXT}Atmosphere)
+endif()

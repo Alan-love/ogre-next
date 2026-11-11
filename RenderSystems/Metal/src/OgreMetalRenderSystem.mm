@@ -158,6 +158,7 @@ namespace Ogre
         ConfigOption optDevice;
         ConfigOption optFSAA;
         ConfigOption optSRGB;
+        ConfigOption optAllowMemoryless;
 
         optDevice.name = "Rendering Device";
         optDevice.currentValue = "(default)";
@@ -179,9 +180,16 @@ namespace Ogre
         optSRGB.currentValue = "Yes";
         optSRGB.immutable = false;
 
+        optAllowMemoryless.name = "Allow Memoryless RTT";
+        optAllowMemoryless.immutable = false;
+        optAllowMemoryless.possibleValues.push_back( "Yes" );
+        optAllowMemoryless.possibleValues.push_back( "No" );
+        optAllowMemoryless.currentValue = optAllowMemoryless.possibleValues.front();
+
         mOptions[optDevice.name] = optDevice;
         mOptions[optFSAA.name] = optFSAA;
         mOptions[optSRGB.name] = optSRGB;
+        mOptions[optAllowMemoryless.name] = optAllowMemoryless;
 
         refreshFSAAOptions();
     }
@@ -239,7 +247,8 @@ namespace Ogre
     }
     //-------------------------------------------------------------------------
     SampleDescription MetalRenderSystem::validateSampleDescription( const SampleDescription &sampleDesc,
-                                                                    PixelFormatGpu format )
+                                                                    PixelFormatGpu format,
+                                                                    uint32 textureFlags )
     {
         uint8 samples = sampleDesc.getMaxSamples();
         if( @available( iOS 9.0, * ) )
@@ -253,6 +262,19 @@ namespace Ogre
         return SampleDescription( samples, sampleDesc.getMsaaPattern() );
     }
     //-------------------------------------------------------------------------
+    bool MetalRenderSystem::supportsMultithreadedShaderCompilation() const
+    {
+#ifndef OGRE_SHADER_THREADING_BACKWARDS_COMPATIBLE_API
+        return true;
+#else
+#    ifdef OGRE_SHADER_THREADING_USE_TLS
+        return true;
+#    else
+        return false;
+#    endif
+#endif
+    }
+    //-------------------------------------------------------------------------
     HardwareOcclusionQuery *MetalRenderSystem::createHardwareOcclusionQuery()
     {
         return 0;  // TODO
@@ -262,6 +284,12 @@ namespace Ogre
     {
         RenderSystemCapabilities *rsc = new RenderSystemCapabilities();
         rsc->setRenderSystemName( getName() );
+
+        rsc->setDeviceName( mActiveDevice->mDevice.name.UTF8String );
+
+#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS || OGRE_CPU == OGRE_CPU_ARM
+        rsc->setVendor( GPU_APPLE );
+#endif
 
         rsc->setCapability( RSC_HWSTENCIL );
         rsc->setStencilBufferBitDepth( 8 );
@@ -273,13 +301,25 @@ namespace Ogre
         rsc->setCapability( RSC_DOT3 );
         rsc->setCapability( RSC_CUBEMAPPING );
         rsc->setCapability( RSC_TEXTURE_COMPRESSION );
+        rsc->setCapability( RSC_SHADER_FLOAT16 );
 #if TARGET_OS_TV
         rsc->setCapability( RSC_TEXTURE_COMPRESSION_ASTC );
 #endif
 #if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
-        rsc->setCapability( RSC_TEXTURE_COMPRESSION_DXT );
-        rsc->setCapability( RSC_TEXTURE_COMPRESSION_BC4_BC5 );
-        // rsc->setCapability(RSC_TEXTURE_COMPRESSION_BC6H_BC7);
+        // If the device is running macOS older than 11,
+        // then they are all x86 systems which all support BCn
+        bool supportsBCTextureCompression = true;
+        if( @available( macOS 11, * ) )
+        {
+            supportsBCTextureCompression = mActiveDevice->mDevice.supportsBCTextureCompression;
+        }
+
+        if( supportsBCTextureCompression )
+        {
+            rsc->setCapability( RSC_TEXTURE_COMPRESSION_DXT );
+            rsc->setCapability( RSC_TEXTURE_COMPRESSION_BC4_BC5 );
+            // rsc->setCapability(RSC_TEXTURE_COMPRESSION_BC6H_BC7);
+        }
 #else
         // Actually the limit is not the count but rather how many bytes are in the
         // GPU's internal TBDR cache (16 bytes for Family 1, 32 bytes for the rest)
@@ -334,6 +374,14 @@ namespace Ogre
         rsc->setComputeProgramConstantBoolCount( 16384 );
         rsc->setComputeProgramConstantIntCount( 16384 );
 
+#if defined( __IPHONE_13_0 ) || defined( __MAC_10_15 )
+        if( @available( iOS 13.0, macOS 10.15, * ) )
+        {
+            if( mActiveDevice->mDevice.hasUnifiedMemory )
+                rsc->setCapability( RSC_UMA );
+        }
+#endif
+
 #if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
         uint8 mrtCount = 8u;
 #else
@@ -348,7 +396,7 @@ namespace Ogre
             mrtCount = 8u;
         }
 #endif
-        rsc->setNumMultiRenderTargets( std::min<int>( mrtCount, OGRE_MAX_MULTIPLE_RENDER_TARGETS ) );
+        rsc->setNumMultiRenderTargets( std::min<ushort>( mrtCount, OGRE_MAX_MULTIPLE_RENDER_TARGETS ) );
         rsc->setCapability( RSC_MRT_DIFFERENT_BIT_DEPTHS );
 
 #if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
@@ -567,6 +615,14 @@ namespace Ogre
             OGRE_ASSERT_LOW( mVaoManager->getDynamicBufferMultiplier() == dynamicBufferMultiplier );
             mHardwareBufferManager = new v1::MetalHardwareBufferManager( &mDevice, mVaoManager );
             mTextureGpuManager = OGRE_NEW MetalTextureGpuManager( mVaoManager, this, &mDevice );
+            {
+                ConfigOptionMap::const_iterator it = getConfigOptions().find( "Allow Memoryless RTT" );
+                if( it != getConfigOptions().end() )
+                {
+                    mTextureGpuManager->setAllowMemoryless(
+                        StringConverter::parseBool( it->second.currentValue, true ) );
+                }
+            }
 
             mInitialized = true;
         }
@@ -574,7 +630,7 @@ namespace Ogre
         Window *win = OGRE_NEW MetalWindow( name, width, height, fullScreen, miscParams, &mDevice );
         mWindows.insert( win );
 
-        win->_initialize( mTextureGpuManager );
+        win->_initialize( mTextureGpuManager, miscParams );
         return win;
     }
     //-------------------------------------------------------------------------
@@ -1129,10 +1185,10 @@ namespace Ogre
 #endif
             {
                 MTLScissorRect scissorRect;
-                scissorRect.x = mCurrentRenderViewport[0].getScissorActualLeft();
-                scissorRect.y = mCurrentRenderViewport[0].getScissorActualTop();
-                scissorRect.width = mCurrentRenderViewport[0].getScissorActualWidth();
-                scissorRect.height = mCurrentRenderViewport[0].getScissorActualHeight();
+                scissorRect.x = (NSUInteger)mCurrentRenderViewport[0].getScissorActualLeft();
+                scissorRect.y = (NSUInteger)mCurrentRenderViewport[0].getScissorActualTop();
+                scissorRect.width = (NSUInteger)mCurrentRenderViewport[0].getScissorActualWidth();
+                scissorRect.height = (NSUInteger)mCurrentRenderViewport[0].getScissorActualHeight();
                 [mActiveRenderEncoder setScissorRect:scissorRect];
             }
 #if defined( __IPHONE_12_0 ) || \
@@ -1142,10 +1198,11 @@ namespace Ogre
                 MTLScissorRect scissorRect[16];
                 for( size_t i = 0; i < numViewports; ++i )
                 {
-                    scissorRect[i].x = mCurrentRenderViewport[i].getScissorActualLeft();
-                    scissorRect[i].y = mCurrentRenderViewport[i].getScissorActualTop();
-                    scissorRect[i].width = mCurrentRenderViewport[i].getScissorActualWidth();
-                    scissorRect[i].height = mCurrentRenderViewport[i].getScissorActualHeight();
+                    scissorRect[i].x = (NSUInteger)mCurrentRenderViewport[i].getScissorActualLeft();
+                    scissorRect[i].y = (NSUInteger)mCurrentRenderViewport[i].getScissorActualTop();
+                    scissorRect[i].width = (NSUInteger)mCurrentRenderViewport[i].getScissorActualWidth();
+                    scissorRect[i].height =
+                        (NSUInteger)mCurrentRenderViewport[i].getScissorActualHeight();
                 }
                 [mActiveRenderEncoder setScissorRects:scissorRect count:numViewports];
             }
@@ -1333,6 +1390,10 @@ namespace Ogre
     //-------------------------------------------------------------------------
     void MetalRenderSystem::_hlmsComputePipelineStateObjectCreated( HlmsComputePso *newPso )
     {
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_MEDIUM
+        debugLogPso( newPso );
+#endif
+
         MetalProgram *computeShader =
             static_cast<MetalProgram *>( newPso->computeShader->_getBindingDelegate() );
 
@@ -1358,7 +1419,7 @@ namespace Ogre
         {
             String errorDesc;
             if( error )
-                errorDesc = [error localizedDescription].UTF8String;
+                errorDesc = error.localizedDescription.UTF8String;
 
             OGRE_EXCEPT( Exception::ERR_RENDERINGAPI_ERROR,
                          "Failed to create pipeline state for compute, error " + errorDesc,
@@ -1370,8 +1431,8 @@ namespace Ogre
     //-------------------------------------------------------------------------
     void MetalRenderSystem::_hlmsComputePipelineStateObjectDestroyed( HlmsComputePso *pso )
     {
-        id<MTLComputePipelineState> metalPso =
-            reinterpret_cast<id<MTLComputePipelineState> >( CFBridgingRelease( pso->rsData ) );
+        if( pso->rsData )  // holds id<MTLComputePipelineState>
+            CFRelease( pso->rsData );
         pso->rsData = 0;
     }
     //-------------------------------------------------------------------------
@@ -1438,6 +1499,8 @@ namespace Ogre
         }
 
         depthState.stencilParams = pso->pass.stencilParams;
+
+        ScopedLock lock( mMutexDepthStencilStates );
 
         CachedDepthStencilStateVec::iterator itor =
             std::lower_bound( mDepthStencilStates.begin(), mDepthStencilStates.end(), depthState );
@@ -1516,6 +1579,7 @@ namespace Ogre
 
         depthState.stencilParams = pso->pass.stencilParams;
 
+        ScopedLock lock( mMutexDepthStencilStates );
         CachedDepthStencilStateVec::iterator itor =
             std::lower_bound( mDepthStencilStates.begin(), mDepthStencilStates.end(), depthState );
 
@@ -1529,8 +1593,12 @@ namespace Ogre
         }
     }
     //-------------------------------------------------------------------------
-    void MetalRenderSystem::_hlmsPipelineStateObjectCreated( HlmsPso *newPso )
+    bool MetalRenderSystem::_hlmsPipelineStateObjectCreated( HlmsPso *newPso, uint64 deadline )
     {
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_MEDIUM
+        debugLogPso( newPso );
+#endif
+
         MTLRenderPipelineDescriptor *psd = [[MTLRenderPipelineDescriptor alloc] init];
         [psd
             setSampleCount:newPso->pass.sampleDescription.getColourSamples()];  // aka .rasterSampleCount
@@ -1538,13 +1606,13 @@ namespace Ogre
         MetalProgram *vertexShader = 0;
         MetalProgram *pixelShader = 0;
 
-        if( !newPso->vertexShader.isNull() )
+        if( newPso->vertexShader )
         {
             vertexShader = static_cast<MetalProgram *>( newPso->vertexShader->_getBindingDelegate() );
             [psd setVertexFunction:vertexShader->getMetalFunction()];
         }
 
-        if( !newPso->pixelShader.isNull() &&
+        if( newPso->pixelShader &&
             newPso->blendblock->mBlendChannelMask != HlmsBlendblock::BlendChannelForceDisabled )
         {
             pixelShader = static_cast<MetalProgram *>( newPso->pixelShader->_getBindingDelegate() );
@@ -1570,7 +1638,7 @@ namespace Ogre
             while( itor != endt )
             {
                 size_t accumOffset = 0;
-                const size_t bufferIdx = itor - newPso->vertexElements.begin();
+                const size_t bufferIdx = size_t( itor - newPso->vertexElements.begin() );
                 VertexElement2Vec::const_iterator it = itor->begin();
                 VertexElement2Vec::const_iterator en = itor->end();
 
@@ -1607,16 +1675,19 @@ namespace Ogre
             psd.vertexDescriptor = vertexDescriptor;
         }
 
-        psd.alphaToCoverageEnabled = newPso->blendblock->mAlphaToCoverageEnabled;
+        psd.alphaToCoverageEnabled =
+            newPso->blendblock->mAlphaToCoverage == HlmsBlendblock::A2cEnabled ||
+            ( newPso->blendblock->mAlphaToCoverage == HlmsBlendblock::A2cEnabledMsaaOnly &&
+              newPso->pass.sampleDescription.isMultisample() );
 
         uint8 mrtCount = 0;
-        for( int i = 0; i < OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
+        for( size_t i = 0; i < OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
         {
             if( newPso->pass.colourFormat[i] != PFG_NULL )
-                mrtCount = i + 1u;
+                mrtCount = uint8( i + 1u );
         }
 
-        for( int i = 0; i < mrtCount; ++i )
+        for( size_t i = 0; i < mrtCount; ++i )
         {
             HlmsBlendblock const *blendblock = newPso->blendblock;
             psd.colorAttachments[i].pixelFormat =
@@ -1647,9 +1718,11 @@ namespace Ogre
             psd.colorAttachments[i].destinationRGBBlendFactor =
                 MetalMappings::get( blendblock->mDestBlendFactor );
             psd.colorAttachments[i].sourceAlphaBlendFactor =
-                MetalMappings::get( blendblock->mSourceBlendFactorAlpha );
+                MetalMappings::get( blendblock->mSeparateBlend ? blendblock->mSourceBlendFactorAlpha
+                                                               : blendblock->mSourceBlendFactor );
             psd.colorAttachments[i].destinationAlphaBlendFactor =
-                MetalMappings::get( blendblock->mDestBlendFactorAlpha );
+                MetalMappings::get( blendblock->mSeparateBlend ? blendblock->mDestBlendFactorAlpha
+                                                               : blendblock->mDestBlendFactor );
 
             psd.colorAttachments[i].writeMask = MetalMappings::get( blendblock->mBlendChannelMask );
         }
@@ -1672,7 +1745,7 @@ namespace Ogre
         {
             String errorDesc;
             if( error )
-                errorDesc = [error localizedDescription].UTF8String;
+                errorDesc = error.localizedDescription.UTF8String;
 
             OGRE_EXCEPT( Exception::ERR_RENDERINGAPI_ERROR,
                          "Failed to created pipeline state for rendering, error " + errorDesc,
@@ -1701,6 +1774,7 @@ namespace Ogre
         }
 
         newPso->rsData = metalPso;
+        return true;
     }
     //-------------------------------------------------------------------------
     void MetalRenderSystem::_hlmsPipelineStateObjectDestroyed( HlmsPso *pso )
@@ -1720,7 +1794,7 @@ namespace Ogre
         samplerDescriptor.minFilter = MetalMappings::get( newBlock->mMinFilter );
         samplerDescriptor.magFilter = MetalMappings::get( newBlock->mMagFilter );
         samplerDescriptor.mipFilter = MetalMappings::getMipFilter( newBlock->mMipFilter );
-        samplerDescriptor.maxAnisotropy = newBlock->mMaxAnisotropy;
+        samplerDescriptor.maxAnisotropy = (NSUInteger)newBlock->mMaxAnisotropy;
         samplerDescriptor.sAddressMode = MetalMappings::get( newBlock->mU );
         samplerDescriptor.tAddressMode = MetalMappings::get( newBlock->mV );
         samplerDescriptor.rAddressMode = MetalMappings::get( newBlock->mW );
@@ -1749,8 +1823,9 @@ namespace Ogre
     //-------------------------------------------------------------------------
     void MetalRenderSystem::_hlmsSamplerblockDestroyed( HlmsSamplerblock *block )
     {
-        id<MTLSamplerState> sampler =
-            reinterpret_cast<id<MTLSamplerState> >( CFBridgingRelease( block->mRsData ) );
+        if( block->mRsData )  // holds id<MTLSamplerState>
+            CFRelease( block->mRsData );
+        block->mRsData = 0;
     }
     //-------------------------------------------------------------------------
     template <typename TDescriptorSetTexture, typename TTexSlot, typename TBufferPacked, bool isUav>
@@ -1891,7 +1966,7 @@ namespace Ogre
                     MetalTexRegion &texRegion = metalSet->textures.back();
                     texRegion.textures = textures;
                     texRegion.shaderType = shaderType;
-                    texRegion.range.location = itor - texContainer.begin();
+                    texRegion.range.location = NSUInteger( itor - texContainer.begin() );
                     texRegion.range.length = 0;
                     needsNewTexRange = false;
                 }
@@ -1928,7 +2003,7 @@ namespace Ogre
                     bufferRegion.buffers = buffers;
                     bufferRegion.offsets = offsets;
                     bufferRegion.shaderType = shaderType;
-                    bufferRegion.range.location = itor - texContainer.begin();
+                    bufferRegion.range.location = NSUInteger( itor - texContainer.begin() );
                     bufferRegion.range.length = 0;
                     needsNewBufferRange = false;
                 }
@@ -2239,8 +2314,11 @@ namespace Ogre
             }
 
             // Setup baseInstance.
-            [mActiveRenderEncoder setVertexBufferOffset:drawCmd->baseInstance * sizeof( uint32 )
-                                                atIndex:15];
+#    if TARGET_OS_SIMULATOR == 0 || OGRE_CPU == OGRE_CPU_ARM
+            [mActiveRenderEncoder setVertexBufferOffset:drawCmd->baseInstance * 4u atIndex:15];
+#    else
+            [mActiveRenderEncoder setVertexBufferOffset:drawCmd->baseInstance * 256u atIndex:15];
+#    endif
 
             [mActiveRenderEncoder drawIndexedPrimitives:primType
                                              indexCount:drawCmd->primCount
@@ -2283,8 +2361,11 @@ namespace Ogre
         {
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
             // Setup baseInstance.
-            [mActiveRenderEncoder setVertexBufferOffset:drawCmd->baseInstance * sizeof( uint32 )
-                                                atIndex:15];
+#    if TARGET_OS_SIMULATOR == 0 || OGRE_CPU == OGRE_CPU_ARM
+            [mActiveRenderEncoder setVertexBufferOffset:drawCmd->baseInstance * 4u atIndex:15];
+#    else
+            [mActiveRenderEncoder setVertexBufferOffset:drawCmd->baseInstance * 256u atIndex:15];
+#    endif
             [mActiveRenderEncoder drawPrimitives:primType
                                      vertexStart:drawCmd->firstVertexIndex
                                      vertexCount:drawCmd->primCount
@@ -2363,7 +2444,11 @@ namespace Ogre
 #    endif
 
         // Setup baseInstance.
-        [mActiveRenderEncoder setVertexBufferOffset:cmd->baseInstance * sizeof( uint32 ) atIndex:15];
+#    if TARGET_OS_SIMULATOR == 0 || OGRE_CPU == OGRE_CPU_ARM
+        [mActiveRenderEncoder setVertexBufferOffset:cmd->baseInstance * 4u atIndex:15];
+#    else
+        [mActiveRenderEncoder setVertexBufferOffset:cmd->baseInstance * 256u atIndex:15];
+#    endif
 
         [mActiveRenderEncoder
             drawIndexedPrimitives:mCurrentPrimType
@@ -2380,7 +2465,7 @@ namespace Ogre
                       indexBuffer:indexBuffer
                 indexBufferOffset:cmd->firstVertexIndex * bytesPerIndexElement + offsetStart
                     instanceCount:cmd->instanceCount
-                       baseVertex:mCurrentVertexBuffer->vertexStart
+                       baseVertex:(NSInteger)mCurrentVertexBuffer->vertexStart
                      baseInstance:cmd->baseInstance];
 #endif
     }
@@ -2389,7 +2474,11 @@ namespace Ogre
     {
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
         // Setup baseInstance.
-        [mActiveRenderEncoder setVertexBufferOffset:cmd->baseInstance * sizeof( uint32 ) atIndex:15];
+#    if TARGET_OS_SIMULATOR == 0 || OGRE_CPU == OGRE_CPU_ARM
+        [mActiveRenderEncoder setVertexBufferOffset:cmd->baseInstance * 4u atIndex:15];
+#    else
+        [mActiveRenderEncoder setVertexBufferOffset:cmd->baseInstance * 256u atIndex:15];
+#    endif
         [mActiveRenderEncoder
             drawPrimitives:mCurrentPrimType
                vertexStart:0 /*cmd->firstVertexIndex already handled in _setRenderOperation*/
@@ -2465,7 +2554,7 @@ namespace Ogre
                         indexBufferOffset:mCurrentIndexBuffer->indexStart * bytesPerIndexElement +
                                           offsetStart
                             instanceCount:numberOfInstances
-                               baseVertex:mCurrentVertexBuffer->vertexStart
+                               baseVertex:(NSInteger)mCurrentVertexBuffer->vertexStart
                              baseInstance:0];
 #endif
             } while( updatePassIterationRenderState() );
@@ -2531,12 +2620,12 @@ namespace Ogre
             break;
         case GPT_HULL_PROGRAM:
             mActiveTessellationHullGpuProgramParameters = params;
-            OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED, "Tesselation is different in Metal.",
+            OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED, "Tessellation is different in Metal.",
                          "MetalRenderSystem::bindGpuProgramParameters" );
             break;
         case GPT_DOMAIN_PROGRAM:
             mActiveTessellationDomainGpuProgramParameters = params;
-            OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED, "Tesselation is different in Metal.",
+            OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED, "Tessellation is different in Metal.",
                          "MetalRenderSystem::bindGpuProgramParameters" );
             break;
         case GPT_COMPUTE_PROGRAM:
@@ -2575,8 +2664,8 @@ namespace Ogre
 
             MetalConstBufferPacked *constBuffer =
                 static_cast<MetalConstBufferPacked *>( mAutoParamsBuffer[mAutoParamsBufferIdx - 1u] );
-            const size_t bindOffset =
-                constBuffer->getTotalSizeBytes() - mCurrentAutoParamsBufferSpaceLeft;
+            const uint32 bindOffset =
+                uint32( constBuffer->getTotalSizeBytes() - mCurrentAutoParamsBufferSpaceLeft );
             switch( gptype )
             {
             case GPT_VERTEX_PROGRAM:
@@ -2600,10 +2689,10 @@ namespace Ogre
             mCurrentAutoParamsBufferPtr += bytesToWrite;
 
             const uint8 *oldBufferPos = mCurrentAutoParamsBufferPtr;
-            mCurrentAutoParamsBufferPtr = reinterpret_cast<uint8 *>(
-                alignToNextMultiple( reinterpret_cast<uintptr_t>( mCurrentAutoParamsBufferPtr ),
-                                     mVaoManager->getConstBufferAlignment() ) );
-            bytesToWrite += mCurrentAutoParamsBufferPtr - oldBufferPos;
+            mCurrentAutoParamsBufferPtr = reinterpret_cast<uint8 *>( alignToNextMultiple<uintptr_t>(
+                reinterpret_cast<uintptr_t>( mCurrentAutoParamsBufferPtr ),
+                mVaoManager->getConstBufferAlignment() ) );
+            bytesToWrite += size_t( mCurrentAutoParamsBufferPtr - oldBufferPos );
 
             // We know that bytesToWrite <= mCurrentAutoParamsBufferSpaceLeft, but that was
             // before padding. After padding this may no longer hold true.

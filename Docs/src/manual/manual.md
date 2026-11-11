@@ -1,23 +1,12 @@
 # Manual {#manual}
 
-This manual is aimed at making the transition to Ogre 2.0 as less
-painful and traumatic as possible.
+To see the expanded version see [Related Pages](pages.html)
 
+- @subpage IntroductionAndChanges
+- @subpage Rendering
+- @subpage Scripts
+- @subpage PerformancePage
 - @subpage Samples
-- @subpage Ogre20Changes
-- @subpage TechnicalOverview
-- @subpage compositor
-- @subpage GiMethods
-- @subpage ImageVoxelConeTracing
-- @subpage instancing
-- @subpage threading
-- @subpage performance
-- @subpage hlms
-- @subpage azdo
-- @subpage commandbuffer
-- @subpage TerraSystem
-- @subpage TuningMemoryResources
-- @subpage Ogre22Changes
-- @subpage BehavorStagingTextureD3D11
-- @subpage Ogre23Changes
-- @subpage RootLayouts
+- @subpage Plugins
+- @subpage MigratingSeries
+- @subpage DeprecationPlan

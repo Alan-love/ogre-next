@@ -28,7 +28,7 @@ cd Ogre
 IF NOT EXIST ogre-next-deps (
 	mkdir ogre-next-deps
 	echo --- Cloning ogre-next-deps ---
-	git clone --recurse-submodules --shallow-submodules https://github.com/OGRECave/ogre-next-deps
+	call git clone --recurse-submodules --shallow-submodules https://github.com/OGRECave/ogre-next-deps
 ) ELSE (
 	echo --- ogre-next-deps repo detected. Cloning skipped ---
 )
@@ -45,7 +45,7 @@ echo --- Building ogre-next-deps ---
 cd ../../
 IF NOT EXIST ogre-next (
 	echo --- Cloning Ogre master ---
-	git clone --branch %OGRE_BRANCH_NAME% https://github.com/OGRECave/ogre-next
+	call git clone --branch %OGRE_BRANCH_NAME% https://github.com/OGRECave/ogre-next
 )
 cd ogre-next
 IF NOT EXIST Dependencies (
@@ -58,7 +58,7 @@ IF NOT EXIST Dependencies (
 mkdir build
 cd build
 echo --- Running CMake configure ---
-%CMAKE_BIN% -D OGRE_USE_BOOST=0 -D OGRE_CONFIG_THREAD_PROVIDER=0 -D OGRE_CONFIG_THREADS=0 -D OGRE_BUILD_COMPONENT_SCENE_FORMAT=1 -D OGRE_BUILD_SAMPLES2=1 -D OGRE_BUILD_TESTS=1 -D OGRE_DEPENDENCIES_DIR=..\..\ogre-next-deps\build\ogredeps -G %GENERATOR% -A %PLATFORM% ..
+%CMAKE_BIN% -D OGRE_CONFIG_THREAD_PROVIDER=0 -D OGRE_CONFIG_THREADS=0 -D OGRE_BUILD_COMPONENT_SCENE_FORMAT=1 -D OGRE_BUILD_SAMPLES2=1 -D OGRE_BUILD_TESTS=1 -D OGRE_DEPENDENCIES_DIR=..\..\ogre-next-deps\build\ogredeps -G %GENERATOR% -A %PLATFORM% ..
 echo --- Building Ogre (Debug) ---
 %CMAKE_BIN% --build . --config Debug
 %CMAKE_BIN% --build . --target install --config Debug

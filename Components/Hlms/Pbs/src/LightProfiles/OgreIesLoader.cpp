@@ -278,7 +278,7 @@ namespace Ogre
         for( size_t x = 0u; x < imageWidth; ++x )
         {
             // fVertAngle is in range [0; 180]
-            float fVertAngle = 180.0f * x / fWidthMinus1;
+            float fVertAngle = 180.0f * float( x ) / fWidthMinus1;
 
             FastArray<float>::const_iterator itAngle =
                 std::lower_bound( mAngleData.begin(), mAngleData.begin() + numVertAngles, fVertAngle );
@@ -306,7 +306,7 @@ namespace Ogre
             else
             {
                 nextAngle.angle = *itAngle;
-                const size_t idx = ( size_t )( itAngle - mAngleData.begin() );
+                const size_t idx = (size_t)( itAngle - mAngleData.begin() );
                 nextAngle.candela = mCandelaValues[idx];
 
                 if( itAngle != mAngleData.begin() )
@@ -314,7 +314,7 @@ namespace Ogre
                     --itAngle;
 
                     prevAngle.angle = *itAngle;
-                    const size_t idx2 = ( size_t )( itAngle - mAngleData.begin() );
+                    const size_t idx2 = (size_t)( itAngle - mAngleData.begin() );
                     prevAngle.candela = mCandelaValues[idx2];
                 }
                 else

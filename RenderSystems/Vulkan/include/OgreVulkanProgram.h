@@ -32,6 +32,7 @@ THE SOFTWARE.
 
 #include "OgreHardwareVertexBuffer.h"
 #include "OgreHighLevelGpuProgram.h"
+#include "OgreVulkanDeviceResource.h"
 
 struct VkVertexInputBindingDescription;
 struct VkVertexInputAttributeDescription;
@@ -69,7 +70,8 @@ namespace Ogre
         not create a program object.  It's up to VulkanGpuProgram class to request a program object
         to link the shader object to.
     */
-    class _OgreVulkanExport VulkanProgram final : public HighLevelGpuProgram
+    class _OgreVulkanExport VulkanProgram final : public HighLevelGpuProgram,
+                                                  protected VulkanDeviceResource
     {
     public:
         /// Command object for setting macro defines
@@ -130,14 +132,19 @@ namespace Ogre
 
         void getLayoutForPso( const VertexElement2VecVec &vertexElements,
                               FastArray<VkVertexInputBindingDescription> &outBufferBindingDescs,
-                              FastArray<VkVertexInputAttributeDescription> &outVertexInputs );
+                              FastArray<VkVertexInputAttributeDescription> &outVertexInputs ) const;
 
         uint32 getDrawIdLocation() const { return mDrawIdLocation; }
 
     protected:
         static CmdPreprocessorDefines msCmdPreprocessorDefines;
 
+        void notifyDeviceLost() override;
+        void notifyDeviceRestored( unsigned pass ) override;
+
         uint32 getEshLanguage() const;
+
+        String getNameForMicrocodeCache( const String &preamble ) const;
 
         /// Returns true if successfully extracted Root Layout from source
         bool extractRootLayoutFromSource();

@@ -28,74 +28,92 @@ THE SOFTWARE.
 #ifndef _OgreHlmsJson_H_
 #define _OgreHlmsJson_H_
 
+#include "OgreHlmsCommon.h"
+
 #if !OGRE_NO_JSON
 
-#include "OgreHlmsCommon.h"
-#include "OgreHlmsDatablock.h"
-#include "OgreHlmsSamplerblock.h"
-#include "OgreLwConstString.h"
-#include "OgreHeaderPrefix.h"
+#    include "OgreHlmsDatablock.h"
+#    include "OgreHlmsSamplerblock.h"
+#    include "OgreLwConstString.h"
+
+#    include "OgreHeaderPrefix.h"
 
 // Forward declaration for |Document|.
 namespace rapidjson
 {
     class CrtAllocator;
-    template <typename> class MemoryPoolAllocator;
-    template <typename> struct UTF8;
-    //template <typename, typename, typename> class GenericDocument;
-    //typedef GenericDocument< UTF8<char>, MemoryPoolAllocator<CrtAllocator>, CrtAllocator > Document;
+    template <typename>
+    class MemoryPoolAllocator;
+    template <typename>
+    struct UTF8;
+    // template <typename, typename, typename> class GenericDocument;
+    // typedef GenericDocument< UTF8<char>, MemoryPoolAllocator<CrtAllocator>, CrtAllocator > Document;
 
-    template <typename BaseAllocator> class MemoryPoolAllocator;
-    template <typename Encoding, typename>  class GenericValue;
+    template <typename BaseAllocator>
+    class MemoryPoolAllocator;
+    template <typename Encoding, typename>
+    class GenericValue;
     typedef GenericValue<UTF8<char>, MemoryPoolAllocator<CrtAllocator> > Value;
-}
+}  // namespace rapidjson
 
 namespace Ogre
 {
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Resources
-    *  @{
-    */
+     *  @{
+     */
 
     class _OgreExport HlmsJsonListener
     {
     public:
         /// Gives you a chance to completely change the name of the texture when saving a material
         virtual void savingChangeTextureName( String &inOutAliasName, String &inOutTexName ) {}
+
+        /** Used by HlmsJson::saveMaterials. Not by HlmsJson::saveMaterial.
+        @remark
+            This function will be called multiple times for the same datablock.
+            All those calls must return a consistent value for the same input datablock.
+        @param datablock
+            Datablock to save or ignore.
+        @return
+            True if the datablock should be saved.
+            False if you wish to exclude it from the saving process.
+        */
+        virtual bool canSaveDatablock( const HlmsDatablock *datablock ) const { return true; }
     };
 
     /** HLMS stands for "High Level Material System". */
-    class _OgreExport HlmsJson : public HlmsAlloc
+    class _OgreExport HlmsJson : public OgreAllocatedObj
     {
     public:
         struct NamedBlocks
         {
-            map<LwConstString, const HlmsMacroblock*>::type macroblocks;
-            map<LwConstString, const HlmsBlendblock*>::type blendblocks;
-            map<LwConstString, const HlmsSamplerblock*>::type samplerblocks;
+            map<LwConstString, const HlmsMacroblock *>::type   macroblocks;
+            map<LwConstString, const HlmsBlendblock *>::type   blendblocks;
+            map<LwConstString, const HlmsSamplerblock *>::type samplerblocks;
         };
 
     protected:
-        HlmsManager *mHlmsManager;
-        HlmsJsonListener    *mListener;
+        HlmsManager      *mHlmsManager;
+        HlmsJsonListener *mListener;
 
     public:
-        static FilterOptions parseFilterOptions( const char *value );
+        static FilterOptions         parseFilterOptions( const char *value );
         static TextureAddressingMode parseTextureAddressingMode( const char *value );
-        static CompareFunction parseCompareFunction( const char *value );
-        static CullingMode parseCullMode( const char *value );
-        static PolygonMode parsePolygonMode( const char *value );
-        static SceneBlendFactor parseBlendFactor( const char *value );
-        static SceneBlendOperation parseBlendOperation( const char *value );
+        static CompareFunction       parseCompareFunction( const char *value );
+        static CullingMode           parseCullMode( const char *value );
+        static PolygonMode           parsePolygonMode( const char *value );
+        static SceneBlendFactor      parseBlendFactor( const char *value );
+        static SceneBlendOperation   parseBlendOperation( const char *value );
 
     protected:
         static void loadSampler( const rapidjson::Value &samplers, HlmsSamplerblock &samplerblock );
         static void loadMacroblock( const rapidjson::Value &macroblocksJson,
-                                    HlmsMacroblock &macroblock );
+                                    HlmsMacroblock         &macroblock );
         static void loadBlendblock( const rapidjson::Value &blendblocksJson,
-                                    HlmsBlendblock &blendblock );
+                                    HlmsBlendblock         &blendblock );
         static void loadDatablockCommon( const rapidjson::Value &json, const NamedBlocks &blocks,
                                          HlmsDatablock *datablock );
 
@@ -116,8 +134,8 @@ namespace Ogre
         static void toStr( const Vector3 &value, String &outString );
         static void toStr( const Vector4 &value, String &outString );
 
-        String getName( const HlmsMacroblock *macroblock ) const;
-        String getName( const HlmsBlendblock *blendblock ) const;
+        String        getName( const HlmsMacroblock *macroblock ) const;
+        String        getName( const HlmsBlendblock *blendblock ) const;
         static String getName( const HlmsSamplerblock *samplerblock );
 
     protected:
@@ -148,8 +166,7 @@ namespace Ogre
             then the actual texture loaded will be "mytex.png.dds"
             Leave it blank if you don't know what to put
         */
-        void loadMaterials( const String &filename, const String &resourceGroup,
-                            const char *jsonString,
+        void loadMaterials( const String &filename, const String &resourceGroup, const char *jsonString,
                             const String &additionalTextureExtension );
 
         /** Saves all the Datablocks defined in the given
@@ -163,9 +180,12 @@ namespace Ogre
             if texture name is "mytex.png" and additionalTextureExtension = ".dds"
             then the actual texture saved will be "mytex.png.dds"
             Leave it blank if you don't know what to put
+        @param sortByName
+            Use true if output JSON should have materials sorted alphabetically
+            by name (case sensitive).
         */
         void saveMaterials( const Hlms *hlms, String &outString,
-                            const String &additionalTextureExtension );
+                            const String &additionalTextureExtension, bool sortByName = false );
 
         /** Saves a single datablock to a string
         @param datablock
@@ -184,9 +204,9 @@ namespace Ogre
     /** @} */
     /** @} */
 
-}
+}  // namespace Ogre
 
-#include "OgreHeaderSuffix.h"
+#    include "OgreHeaderSuffix.h"
 
 #endif
 

@@ -12,15 +12,15 @@ namespace Demo
 {
     CameraController::CameraController( GraphicsSystem *graphicsSystem, bool useSceneNode ) :
         mUseSceneNode( useSceneNode ),
-        mSpeedMofifier( false ),
+        mSpeedModifier( false ),
         mCameraYaw( 0 ),
         mCameraPitch( 0 ),
         mCameraBaseSpeed( 10 ),
         mCameraSpeedBoost( 5 ),
         mGraphicsSystem( graphicsSystem )
     {
-        memset( mWASD, 0, sizeof(mWASD) );
-        memset( mSlideUpDown, 0, sizeof(mSlideUpDown) );
+        memset( mWASD, 0, sizeof( mWASD ) );
+        memset( mSlideUpDown, 0, sizeof( mSlideUpDown ) );
     }
     //-----------------------------------------------------------------------------------
     void CameraController::update( float timeSinceLast )
@@ -44,7 +44,7 @@ namespace Demo
                 camera->pitch( Ogre::Radian( mCameraPitch ) );
             }
 
-            mCameraYaw   = 0.0f;
+            mCameraYaw = 0.0f;
             mCameraPitch = 0.0f;
         }
 
@@ -54,9 +54,11 @@ namespace Demo
 
         if( camMovementZ || camMovementX || slideUpDown )
         {
-            Ogre::Vector3 camMovementDir( camMovementX, slideUpDown, camMovementZ );
+            Ogre::Vector3 camMovementDir( (Ogre::Real)camMovementX, (Ogre::Real)slideUpDown,
+                                          (Ogre::Real)camMovementZ );
             camMovementDir.normalise();
-            camMovementDir *= timeSinceLast * mCameraBaseSpeed * (1 + mSpeedMofifier * mCameraSpeedBoost);
+            camMovementDir *=
+                timeSinceLast * mCameraBaseSpeed * ( 1 + mSpeedModifier * mCameraSpeedBoost );
 
             if( mUseSceneNode )
             {
@@ -73,7 +75,7 @@ namespace Demo
     bool CameraController::keyPressed( const SDL_KeyboardEvent &arg )
     {
         if( arg.keysym.scancode == SDL_SCANCODE_LSHIFT )
-            mSpeedMofifier = true;
+            mSpeedModifier = true;
 
         if( arg.keysym.scancode == SDL_SCANCODE_W )
             mWASD[0] = true;
@@ -96,7 +98,7 @@ namespace Demo
     bool CameraController::keyReleased( const SDL_KeyboardEvent &arg )
     {
         if( arg.keysym.scancode == SDL_SCANCODE_LSHIFT )
-            mSpeedMofifier = false;
+            mSpeedModifier = false;
 
         if( arg.keysym.scancode == SDL_SCANCODE_W )
             mWASD[0] = false;
@@ -118,10 +120,10 @@ namespace Demo
     //-----------------------------------------------------------------------------------
     void CameraController::mouseMoved( const SDL_Event &arg )
     {
-        float width  = static_cast<float>( mGraphicsSystem->getRenderWindow()->getWidth() );
+        float width = static_cast<float>( mGraphicsSystem->getRenderWindow()->getWidth() );
         float height = static_cast<float>( mGraphicsSystem->getRenderWindow()->getHeight() );
 
-        mCameraYaw   += -arg.motion.xrel / width;
-        mCameraPitch += -arg.motion.yrel / height;
+        mCameraYaw += float( -arg.motion.xrel ) / width;
+        mCameraPitch += float( -arg.motion.yrel ) / height;
     }
-}
+}  // namespace Demo

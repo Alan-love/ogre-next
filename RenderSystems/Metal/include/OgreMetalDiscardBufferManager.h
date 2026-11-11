@@ -44,7 +44,7 @@ namespace Ogre
     ///
     /// We need Discard for the v1 interfaces. So we need to emulate it.
     /// This class does exactly this.
-    class _OgreMetalExport MetalDiscardBufferManager : public BufferAlloc
+    class _OgreMetalExport MetalDiscardBufferManager : public OgreAllocatedObj
     {
     public:
         struct UnsafeBlock : public MetalVaoManager::Block
@@ -66,8 +66,8 @@ namespace Ogre
 
     private:
         id<MTLBuffer>             mBuffer;
-        MetalDevice *             mDevice;
-        VaoManager *              mVaoManager;
+        MetalDevice              *mDevice;
+        VaoManager               *mVaoManager;
         MetalVaoManager::BlockVec mFreeBlocks;
 
         UnsafeBlockVec mUnsafeBlocks;
@@ -121,10 +121,10 @@ namespace Ogre
         void destroyDiscardBuffer( MetalDiscardBuffer *discardBuffer );
 
         MetalDevice *getDevice() const { return mDevice; }
-        VaoManager * getVaoManager() const { return mVaoManager; }
+        VaoManager  *getVaoManager() const { return mVaoManager; }
     };
 
-    class _OgreMetalExport MetalDiscardBuffer : public BufferAlloc
+    class _OgreMetalExport MetalDiscardBuffer : public OgreAllocatedObj
     {
         friend class MetalDiscardBufferManager;
 
@@ -137,7 +137,7 @@ namespace Ogre
         uint16 mAlignment;
         uint32 mLastFrameUsed;
 
-        VaoManager *               mVaoManager;
+        VaoManager                *mVaoManager;
         MetalDiscardBufferManager *mOwner;
 
     public:

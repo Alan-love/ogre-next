@@ -64,6 +64,51 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     VulkanTextureGpu::~VulkanTextureGpu() { destroyInternalResourcesImpl(); }
     //-----------------------------------------------------------------------------------
+    void VulkanTextureGpu::notifyDeviceLost()
+    {
+        // release VkImage
+        mPendingResidencyChanges = 0;  // we already cleared D3D11TextureGpuManager::mScheduledTasks
+        mTexturePool = 0;              // texture pool is already destroyed
+        mInternalSliceStart = 0;
+        if( getResidencyStatus() == GpuResidency::Resident )
+        {
+            _transitionTo( GpuResidency::OnStorage, (uint8 *)0 );
+            mNextResidencyStatus = GpuResidency::Resident;
+        }
+        mDisplayTextureName = 0;
+
+        // release VkImageView
+        if( mDefaultDisplaySrv && mOwnsSrv )
+        {
+            VulkanTextureGpuManager *textureManager =
+                static_cast<VulkanTextureGpuManager *>( mTextureManager );
+            VulkanDevice *device = textureManager->getDevice();
+
+            vkDestroyImageView( device->mDevice, mDefaultDisplaySrv, 0 );
+            mDefaultDisplaySrv = 0;
+            mOwnsSrv = false;
+        }
+        mDefaultDisplaySrv = 0;
+    }
+    //-----------------------------------------------------------------------------------
+    void VulkanTextureGpu::notifyDeviceRestored( unsigned pass )
+    {
+        if( pass == 0 )
+        {
+            // VulkanWindow*::notifyDeviceRestored handles RenderWindow-specific textures
+            if( !isRenderWindowSpecific() )
+            {
+                _setToDisplayDummyTexture();
+
+                if( getNextResidencyStatus() == GpuResidency::Resident )
+                {
+                    mNextResidencyStatus = mResidencyStatus;
+                    scheduleTransitionTo( GpuResidency::Resident );
+                }
+            }
+        }
+    }
+    //-----------------------------------------------------------------------------------
     PixelFormatGpu VulkanTextureGpu::getWorkaroundedPixelFormat( const PixelFormatGpu pixelFormat ) const
     {
         PixelFormatGpu retVal = pixelFormat;
@@ -86,6 +131,12 @@ namespace Ogre
 
         const PixelFormatGpu finalPixelFormat = getWorkaroundedPixelFormat( mPixelFormat );
 
+        // Unfortunately this is necessary, which means the abstraction may leak to the user.
+        // The pixel format is used in PSO generation, which creates a lot of issues I'm not willing
+        // to fix just because one old driver is broken. Setting mPixelFormat here fixes all issues so
+        // far encountered with old Adreno drivers.
+        mPixelFormat = finalPixelFormat;
+
         VkImageCreateInfo imageInfo;
         makeVkStruct( imageInfo, VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO );
         imageInfo.imageType = getVulkanTextureType();
@@ -102,14 +153,26 @@ namespace Ogre
             imageInfo.format = VulkanMappings::get( PixelFormatGpuUtils::getFamily( finalPixelFormat ) );
             imageInfo.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
         }
+        OGRE_ASSERT_LOW( imageInfo.format != VK_FORMAT_UNDEFINED &&
+                         "Invalid PixelFormatGpu requested. Did you request a CPU-only format?" );
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         if( hasMsaaExplicitResolves() )
         {
-            imageInfo.samples =
-                static_cast<VkSampleCountFlagBits>( mSampleDescription.getColourSamples() );
+            if( mSampleDescription.getCoverageSamples() != 0u &&
+                ( PixelFormatGpuUtils::isDepth( finalPixelFormat ) ||
+                  PixelFormatGpuUtils::isStencil( finalPixelFormat ) ) )
+            {
+                imageInfo.samples =
+                    static_cast<VkSampleCountFlagBits>( mSampleDescription.getCoverageSamples() );
+            }
+            else
+            {
+                imageInfo.samples =
+                    static_cast<VkSampleCountFlagBits>( mSampleDescription.getColourSamples() );
+            }
         }
         else
             imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -128,6 +191,15 @@ namespace Ogre
         if( isUav() )
             imageInfo.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 
+        const bool bAllowMemoryless = mTextureManager->allowMemoryless();
+        if( bAllowMemoryless && isTilerMemoryless() )
+        {
+            imageInfo.usage |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+            imageInfo.usage &=
+                ( VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT );
+        }
+
         String textureName = getNameStr();
 
         VulkanTextureGpuManager *textureManager =
@@ -135,7 +207,7 @@ namespace Ogre
         VulkanDevice *device = textureManager->getDevice();
 
         VkResult imageResult = vkCreateImage( device->mDevice, &imageInfo, 0, &mFinalTextureName );
-        checkVkResult( imageResult, "vkCreateImage" );
+        checkVkResult( device, imageResult, "vkCreateImage" );
 
         setObjectName( device->mDevice, (uint64_t)mFinalTextureName,
                        VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, textureName.c_str() );
@@ -150,7 +222,7 @@ namespace Ogre
 
         VkResult result =
             vkBindImageMemory( device->mDevice, mFinalTextureName, deviceMemory, mInternalBufferStart );
-        checkVkResult( result, "vkBindImageMemory" );
+        checkVkResult( device, result, "vkBindImageMemory" );
 
         if( isPoolOwner() )
         {
@@ -169,7 +241,7 @@ namespace Ogre
             imageBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
             vkCmdPipelineBarrier(
-                device->mGraphicsQueue.mCurrentCmdBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                device->mGraphicsQueue.getCurrentCmdBuffer(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                 VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0u, 0, 0u, 0, 1u, &imageBarrier );
 
             mCurrLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -207,7 +279,7 @@ namespace Ogre
                 imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
                 imageBarrier.newLayout = mCurrLayout;
                 vkCmdPipelineBarrier(
-                    device->mGraphicsQueue.mCurrentCmdBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    device->mGraphicsQueue.getCurrentCmdBuffer(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                     VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0u, 0, 0u, 0, 1u, &imageBarrier );
             }
         }
@@ -441,6 +513,8 @@ namespace Ogre
             OGRE_ASSERT_MEDIUM( false && "Unimplemented. How are you here?" );
             return ResourceLayout::RenderTargetReadOnly;
         }
+
+        return ResourceLayout::Undefined;
     }
     //-----------------------------------------------------------------------------------
     void VulkanTextureGpu::setTextureType( TextureTypes::TextureTypes textureType )
@@ -491,9 +565,9 @@ namespace Ogre
         region.dstSubresource.baseArrayLayer = destinationSlice;
         region.dstSubresource.layerCount = numSlices;
 
-        region.dstOffset.x = dstBox.x;
-        region.dstOffset.y = dstBox.y;
-        region.dstOffset.z = dstBox.z;
+        region.dstOffset.x = static_cast<int32_t>( dstBox.x );
+        region.dstOffset.y = static_cast<int32_t>( dstBox.y );
+        region.dstOffset.z = static_cast<int32_t>( dstBox.z );
 
         region.extent.width = srcBox.width;
         region.extent.height = srcBox.height;
@@ -507,7 +581,7 @@ namespace Ogre
         if( dstTexture->isMultisample() && !dstTexture->hasMsaaExplicitResolves() )
             dstTextureName = dstTexture->mMsaaFramebufferName;
 
-        vkCmdCopyImage( device->mGraphicsQueue.mCurrentCmdBuffer, srcTextureName, mCurrLayout,
+        vkCmdCopyImage( device->mGraphicsQueue.getCurrentCmdBuffer(), srcTextureName, mCurrLayout,
                         dstTextureName, dstTexture->mCurrLayout, 1u, &region );
 
         if( dstTexture->isMultisample() && !dstTexture->hasMsaaExplicitResolves() &&
@@ -524,7 +598,7 @@ namespace Ogre
             resolve.extent.height = getInternalHeight();
             resolve.extent.depth = getDepth();
 
-            vkCmdResolveImage( device->mGraphicsQueue.mCurrentCmdBuffer,
+            vkCmdResolveImage( device->mGraphicsQueue.getCurrentCmdBuffer(),
                                dstTexture->mMsaaFramebufferName, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                dstTexture->mFinalTextureName, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u,
                                &resolve );
@@ -563,27 +637,37 @@ namespace Ogre
         const size_t numMipmaps = mNumMipmaps;
         const uint32 numSlices = getNumSlices();
 
-        VkImageMemoryBarrier imageBarrier = getImageMemoryBarrier();
+        VkImageMemoryBarrier imageBarrier[2];
+        imageBarrier[0] = getImageMemoryBarrier();
+        imageBarrier[1] = imageBarrier[0];
 
-        imageBarrier.subresourceRange.levelCount = 1u;
+        imageBarrier[0].subresourceRange.levelCount = 1u;
+        imageBarrier[1].subresourceRange.levelCount = 1u;
+
+        imageBarrier[0].subresourceRange.baseMipLevel = 1u;
+        imageBarrier[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        imageBarrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        imageBarrier[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        imageBarrier[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+        if( numMipmaps > 1u )
+        {
+            // getCopyEncoder transitioned mip 1 into SRC. We need it in DST.
+            imageBarrier[1].subresourceRange.baseMipLevel = 1u;
+            imageBarrier[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            imageBarrier[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            imageBarrier[1].srcAccessMask = 0;
+            imageBarrier[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            vkCmdPipelineBarrier( device->mGraphicsQueue.getCurrentCmdBuffer(),
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0u,
+                                  0, 0u, 0, 1u, &imageBarrier[1] );
+        }
 
         const uint32 internalWidth = getInternalWidth();
         const uint32 internalHeight = getInternalHeight();
 
         for( size_t i = 1u; i < numMipmaps; ++i )
         {
-            // Convert the dst mipmap 'i' to TRANSFER_DST_OPTIMAL. Does not have to wait
-            // on anything because previous barriers (compositor or getCopyEncoder)
-            // have already waited
-            imageBarrier.subresourceRange.baseMipLevel = static_cast<uint32_t>( i );
-            imageBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            imageBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            imageBarrier.srcAccessMask = 0;
-            imageBarrier.dstAccessMask = 0;
-            vkCmdPipelineBarrier(
-                device->mGraphicsQueue.mCurrentCmdBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0u, 0, 0u, 0, 1u, &imageBarrier );
-
             VkImageBlit region;
 
             region.srcSubresource.aspectMask = VulkanMappings::getImageAspect( this->getPixelFormat() );
@@ -613,19 +697,40 @@ namespace Ogre
             region.dstOffsets[1].y = static_cast<int32_t>( std::max( internalHeight >> i, 1u ) );
             region.dstOffsets[1].z = static_cast<int32_t>( std::max( getDepth() >> i, 1u ) );
 
-            vkCmdBlitImage( device->mGraphicsQueue.mCurrentCmdBuffer, mFinalTextureName, mCurrLayout,
+            vkCmdBlitImage( device->mGraphicsQueue.getCurrentCmdBuffer(), mFinalTextureName, mCurrLayout,
                             mFinalTextureName, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region,
                             VK_FILTER_LINEAR );
 
+            // Convert the dst mipmap 'i' to TRANSFER_DST_OPTIMAL. Does not have to wait
+            // on anything because previous barriers (compositor or getCopyEncoder)
+            // have already waited
+            imageBarrier[0].subresourceRange.baseMipLevel = static_cast<uint32_t>( i );
+            imageBarrier[1].subresourceRange.baseMipLevel = static_cast<uint32_t>( i + 1u );
+
+            const uint32 numBarriers = i == ( numMipmaps - 1u ) ? 1u : 2u;
+
             // Wait for vkCmdBlitImage on mip i to finish before advancing to mip i+1
             // Also transition src mip 'i' to TRANSFER_SRC_OPTIMAL
-            imageBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            imageBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            imageBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            imageBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            vkCmdPipelineBarrier( device->mGraphicsQueue.mCurrentCmdBuffer,
+            // Also transition src mip 'i+1' to TRANSFER_DST_OPTIMAL
+            vkCmdPipelineBarrier( device->mGraphicsQueue.getCurrentCmdBuffer(),
                                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0u,
-                                  0, 0u, 0, 1u, &imageBarrier );
+                                  0, 0u, 0, numBarriers, imageBarrier );
+        }
+    }
+    //-----------------------------------------------------------------------------------
+    void VulkanTextureGpu::getCustomAttribute( IdString name, void *pData )
+    {
+        if( name == msFinalTextureBuffer )
+        {
+            *static_cast<VkImage *>( pData ) = mFinalTextureName;
+        }
+        else if( name == msMsaaTextureBuffer )
+        {
+            *static_cast<VkImage *>( pData ) = mMsaaFramebufferName;
+        }
+        else
+        {
+            TextureGpu::getCustomAttribute( name, pData );
         }
     }
     //-----------------------------------------------------------------------------------
@@ -706,6 +811,8 @@ namespace Ogre
 
         VkImageViewType texType = this->getInternalVulkanTextureViewType();
 
+        // See comments in VulkanPixelFormatToShaderType::getDataType.
+        // Cubemaps in UAVs are always interpreted as Array2D images.
         if( ( cubemapsAs2DArrays || forUav || numSlices == 1u ) &&
             ( mTextureType == TextureTypes::TypeCube || mTextureType == TextureTypes::TypeCubeArray ) )
         {
@@ -765,7 +872,13 @@ namespace Ogre
 
         VkImageView imageView;
         VkResult result = vkCreateImageView( device->mDevice, &imageViewCi, 0, &imageView );
-        checkVkResult( result, "vkCreateImageView" );
+        checkVkResult( device, result, "vkCreateImageView" );
+
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_HIGH
+        const String textureName = getNameStr() + "(View)";
+        setObjectName( device->mDevice, (uint64_t)imageView, VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT,
+                       textureName.c_str() );
+#endif
 
         return imageView;
     }
@@ -881,15 +994,9 @@ namespace Ogre
         mDesiredDepthBufferFormat = desiredDepthBufferFormat;
     }
     //-----------------------------------------------------------------------------------
-    uint16 VulkanTextureGpuRenderTarget::getDepthBufferPoolId() const
-    {
-        return mDepthBufferPoolId;
-    }
+    uint16 VulkanTextureGpuRenderTarget::getDepthBufferPoolId() const { return mDepthBufferPoolId; }
     //-----------------------------------------------------------------------------------
-    bool VulkanTextureGpuRenderTarget::getPreferDepthTexture() const
-    {
-        return mPreferDepthTexture;
-    }
+    bool VulkanTextureGpuRenderTarget::getPreferDepthTexture() const { return mPreferDepthTexture; }
     //-----------------------------------------------------------------------------------
     PixelFormatGpu VulkanTextureGpuRenderTarget::getDesiredDepthBufferFormat() const
     {
@@ -913,11 +1020,33 @@ namespace Ogre
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.samples = static_cast<VkSampleCountFlagBits>( mSampleDescription.getColourSamples() );
+        if( mSampleDescription.getCoverageSamples() != 0u &&
+            ( PixelFormatGpuUtils::isDepth( finalPixelFormat ) ||
+              PixelFormatGpuUtils::isStencil( finalPixelFormat ) ) )
+        {
+            imageInfo.samples =
+                static_cast<VkSampleCountFlagBits>( mSampleDescription.getCoverageSamples() );
+        }
+        else
+        {
+            imageInfo.samples =
+                static_cast<VkSampleCountFlagBits>( mSampleDescription.getColourSamples() );
+        }
         imageInfo.flags = 0;
         imageInfo.usage |= PixelFormatGpuUtils::isDepth( finalPixelFormat )
                                ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
                                : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        const bool bAllowMemoryless = mTextureManager->allowMemoryless();
+        if( bAllowMemoryless )
+        {
+            // mMsaaFramebufferName is always Memoryless because the user *NEVER* has access to it
+            // and we always auto-resolve in the same pass, thus MSAA contents are always transient.
+            imageInfo.usage |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+            imageInfo.usage &=
+                ( VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT );
+        }
 
         String textureName = getNameStr() + "/MsaaImplicit";
 
@@ -926,7 +1055,7 @@ namespace Ogre
         VulkanDevice *device = textureManager->getDevice();
 
         VkResult imageResult = vkCreateImage( device->mDevice, &imageInfo, 0, &mMsaaFramebufferName );
-        checkVkResult( imageResult, "vkCreateImage" );
+        checkVkResult( device, imageResult, "vkCreateImage" );
 
         setObjectName( device->mDevice, (uint64_t)mMsaaFramebufferName,
                        VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, textureName.c_str() );
@@ -941,14 +1070,14 @@ namespace Ogre
 
         VkResult result = vkBindImageMemory( device->mDevice, mMsaaFramebufferName, deviceMemory,
                                              mMsaaInternalBufferStart );
-        checkVkResult( result, "vkBindImageMemory" );
+        checkVkResult( device, result, "vkBindImageMemory" );
 
         // Immediately transition to its only state
         VkImageMemoryBarrier imageBarrier = this->getImageMemoryBarrier();
         imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imageBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         imageBarrier.image = mMsaaFramebufferName;
-        vkCmdPipelineBarrier( device->mGraphicsQueue.mCurrentCmdBuffer,
+        vkCmdPipelineBarrier( device->mGraphicsQueue.getCurrentCmdBuffer(),
                               VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                               PixelFormatGpuUtils::isDepth( finalPixelFormat )
                                   ? ( VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
@@ -981,16 +1110,14 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     void VulkanTextureGpuRenderTarget::setOrientationMode( OrientationMode orientationMode )
     {
-        OGRE_ASSERT_LOW( mResidencyStatus == GpuResidency::OnStorage || isRenderWindowSpecific() );
+        OGRE_ASSERT_LOW( mResidencyStatus == GpuResidency::OnStorage || isRenderWindowSpecific() ||
+                         ( isRenderToTexture() && mWidth == mHeight ) );
 #if OGRE_NO_VIEWPORT_ORIENTATIONMODE == 0
         mOrientationMode = orientationMode;
 #endif
     }
     //-----------------------------------------------------------------------------------
 #if OGRE_NO_VIEWPORT_ORIENTATIONMODE == 0
-    OrientationMode VulkanTextureGpuRenderTarget::getOrientationMode() const
-    {
-        return mOrientationMode;
-    }
+    OrientationMode VulkanTextureGpuRenderTarget::getOrientationMode() const { return mOrientationMode; }
 #endif
 }  // namespace Ogre

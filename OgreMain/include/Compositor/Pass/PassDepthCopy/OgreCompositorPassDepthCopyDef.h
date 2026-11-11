@@ -29,50 +29,56 @@ THE SOFTWARE.
 #ifndef _OgreCompositorPassDepthCopyDef_H_
 #define _OgreCompositorPassDepthCopyDef_H_
 
-#include "OgreHeaderPrefix.h"
-
 #include "../OgreCompositorPassDef.h"
 #include "OgreCommon.h"
+
+#include "OgreHeaderPrefix.h"
 
 namespace Ogre
 {
     class CompositorNodeDef;
 
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Effects
-    *  @{
-    */
+     *  @{
+     */
 
     class _OgreExport CompositorPassDepthCopyDef : public CompositorPassDef
     {
         friend class CompositorPassDepthCopy;
+
     protected:
         /// Name of the src RT (can come from input channel, local textures, or global ones)
-        IdString    mSrcDepthTextureName;
+        IdString mSrcDepthTextureName;
         /// Name of the dst RT (can come from input channel, local textures, or global ones)
-        IdString    mDstDepthTextureName;
-        CompositorNodeDef   *mParentNodeDef;
+        IdString           mDstDepthTextureName;
+        CompositorNodeDef *mParentNodeDef;
 
     public:
+        uint8_t mMipLevelStart;
+        uint8_t mNumMiplevels;  /// If set to 0, it will cover up until the max mip.
 
-        CompositorPassDepthCopyDef( CompositorNodeDef *parentNodeDef,
+    public:
+        CompositorPassDepthCopyDef( CompositorNodeDef   *parentNodeDef,
                                     CompositorTargetDef *parentTargetDef ) :
             CompositorPassDef( PASS_DEPTHCOPY, parentTargetDef ),
-            mParentNodeDef( parentNodeDef )
+            mParentNodeDef( parentNodeDef ),
+            mMipLevelStart( 0u ),
+            mNumMiplevels( 1u )
         {
         }
 
         /** Indicates the pass to change the texture units to use the specified texture sources.
-            @See QuadTextureSource for params
+            See CompositorPassQuadDef::QuadTextureSource for params
         */
         void setDepthTextureCopy( const String &srcTextureName, const String &dstTextureName );
     };
 
     /** @} */
     /** @} */
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

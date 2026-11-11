@@ -29,6 +29,10 @@ THE SOFTWARE.
 #include "OgreStableHeaders.h"
 
 #include "Compositor/Pass/OgreCompositorPassDef.h"
+
+#include "Compositor/OgreCompositorManager2.h"
+#include "Compositor/OgreCompositorNodeDef.h"
+#include "Compositor/Pass/OgreCompositorPassProvider.h"
 #include "Compositor/Pass/PassClear/OgreCompositorPassClearDef.h"
 #include "Compositor/Pass/PassCompute/OgreCompositorPassComputeDef.h"
 #include "Compositor/Pass/PassDepthCopy/OgreCompositorPassDepthCopyDef.h"
@@ -40,17 +44,13 @@ THE SOFTWARE.
 #include "Compositor/Pass/PassStencil/OgreCompositorPassStencilDef.h"
 #include "Compositor/Pass/PassTargetBarrier/OgreCompositorPassTargetBarrierDef.h"
 #include "Compositor/Pass/PassUav/OgreCompositorPassUavDef.h"
-
-#include "Compositor/OgreCompositorNodeDef.h"
-#include "Compositor/OgreCompositorManager2.h"
-#include "Compositor/Pass/OgreCompositorPassProvider.h"
-
+#include "Compositor/Pass/PassWarmUp/OgreCompositorPassWarmUpDef.h"
 #include "OgreLwString.h"
 
 namespace Ogre
 {
-    const char *CompositorPassTypeEnumNames[PASS_CUSTOM+1u] =
-    {
+    const char *CompositorPassTypeEnumNames[] = {
+        // clang-format off
         "INVALID",
         "SCENE",
         "QUAD",
@@ -63,8 +63,10 @@ namespace Ogre
         "IBL_SPECULAR",
         "SHADOWS",
         "TARGET_BARRIER",
+        "PASS_WARM_UP",
         "COMPUTE",
         "CUSTOM"
+        // clang-format on
     };
 
     CompositorTargetDef::CompositorTargetDef( const String &renderTargetName, uint32 rtIndex,
@@ -76,14 +78,18 @@ namespace Ogre
         mTargetLevelBarrier( 0 ),
         mParentNodeDef( parentNodeDef )
     {
+        static_assert(
+            sizeof( CompositorPassTypeEnumNames ) / sizeof( CompositorPassTypeEnumNames[0] ) ==
+                ( PASS_CUSTOM + 1 ),
+            "CompositorPassTypeEnumNames string was not updated to match all CompositorPassType" );
     }
     //-----------------------------------------------------------------------------------
     CompositorTargetDef::~CompositorTargetDef()
     {
         CompositorPassDefVec::const_iterator itor = mCompositorPasses.begin();
-        CompositorPassDefVec::const_iterator end  = mCompositorPasses.end();
+        CompositorPassDefVec::const_iterator endt = mCompositorPasses.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
             OGRE_DELETE *itor;
             ++itor;
@@ -109,7 +115,7 @@ namespace Ogre
         }
     }
     //-----------------------------------------------------------------------------------
-    CompositorPassDef* CompositorTargetDef::addPass( CompositorPassType passType, IdString customId )
+    CompositorPassDef *CompositorTargetDef::addPass( CompositorPassType passType, IdString customId )
     {
         CompositorPassDef *retVal = 0;
         switch( passType )
@@ -144,20 +150,25 @@ namespace Ogre
         case PASS_IBL_SPECULAR:
             retVal = OGRE_NEW CompositorPassIblSpecularDef( mParentNodeDef, this );
             break;
-        case PASS_CUSTOM:
-            {
-                CompositorPassProvider *passProvider = mParentNodeDef->getCompositorManager()->
-                                                                    getCompositorPassProvider();
-                if( !passProvider )
-                {
-                    OGRE_EXCEPT( Exception::ERR_INVALID_STATE,
-                                 "Using custom compositor passes but no provider is set",
-                                 "CompositorTargetDef::addPass" );
-                }
-
-                retVal = passProvider->addPassDef( passType, customId, this, mParentNodeDef );
-            }
+        case PASS_WARM_UP:
+            retVal = OGRE_NEW CompositorPassWarmUpDef( mParentNodeDef, this );
             break;
+        case PASS_CUSTOM:
+        {
+            CompositorPassProvider *passProvider =
+                mParentNodeDef->getCompositorManager()->getCompositorPassProvider();
+            if( !passProvider )
+            {
+                OGRE_EXCEPT( Exception::ERR_INVALID_STATE,
+                             "Using custom compositor passes but no provider is set",
+                             "CompositorTargetDef::addPass" );
+            }
+
+            retVal = passProvider->addPassDef( passType, customId, this, mParentNodeDef );
+            if( retVal->getCustomId() == 0u )
+                retVal->_setCustomId( customId.getU32Value() );
+        }
+        break;
         case PASS_TARGET_BARRIER:
             OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS, "Use CompositorTargetDef::setTargetLevelBarrier",
                          "CompositorTargetDef::addPass" );
@@ -166,7 +177,7 @@ namespace Ogre
         }
 
         char tmpBuffer[128];
-        LwString profilingId( LwString::FromEmptyPointer( tmpBuffer, sizeof(tmpBuffer) ) );
+        LwString profilingId( LwString::FromEmptyPointer( tmpBuffer, sizeof( tmpBuffer ) ) );
         profilingId.a( CompositorPassTypeEnumNames[passType], " ",
                        Id::generateNewId<CompositorPassDef>() );
         retVal->mProfilingId = profilingId.c_str();
@@ -174,7 +185,7 @@ namespace Ogre
         mParentNodeDef->postInitializePassDef( retVal );
 
         mCompositorPasses.push_back( retVal );
-        
+
         return retVal;
     }
     //-----------------------------------------------------------------------------------
@@ -182,33 +193,31 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     void CompositorPassDef::setAllClearColours( const ColourValue &clearValue )
     {
-        for( int i=0; i<OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
+        for( int i = 0; i < OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
             mClearColour[i] = clearValue;
     }
     //-----------------------------------------------------------------------------------
     void CompositorPassDef::setAllLoadActions( LoadAction::LoadAction loadAction )
     {
-        for( int i=0; i<OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
+        for( int i = 0; i < OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
             mLoadActionColour[i] = loadAction;
-        mLoadActionDepth    = loadAction;
-        mLoadActionStencil  = loadAction;
+        mLoadActionDepth = loadAction;
+        mLoadActionStencil = loadAction;
     }
     //-----------------------------------------------------------------------------------
     void CompositorPassDef::setAllStoreActions( StoreAction::StoreAction storeAction )
     {
-        for( int i=0; i<OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
+        for( int i = 0; i < OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
             mStoreActionColour[i] = storeAction;
-        mStoreActionDepth    = storeAction;
-        mStoreActionStencil  = storeAction;
+        mStoreActionDepth = storeAction;
+        mStoreActionStencil = storeAction;
     }
     //-----------------------------------------------------------------------------------
-    uint32 CompositorPassDef::getRtIndex() const
-    {
-        return mParentTargetDef->getRtIndex();
-    }
+    uint32 CompositorPassDef::getRtIndex() const { return mParentTargetDef->getRtIndex(); }
     //-----------------------------------------------------------------------------------
-    const CompositorTargetDef* CompositorPassDef::getParentTargetDef() const
-    {
-        return mParentTargetDef;
-    }
-}
+    const CompositorTargetDef *CompositorPassDef::getParentTargetDef() const { return mParentTargetDef; }
+    //-----------------------------------------------------------------------------------
+    //-----------------------------------------------------------------------------------
+    //-----------------------------------------------------------------------------------
+    CompositorPassProvider::~CompositorPassProvider() {}
+}  // namespace Ogre

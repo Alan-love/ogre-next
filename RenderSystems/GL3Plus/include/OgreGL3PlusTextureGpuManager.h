@@ -30,6 +30,7 @@ THE SOFTWARE.
 #define _OgreGL3PlusTextureGpuManager_H_
 
 #include "OgreGL3PlusPrerequisites.h"
+
 #include "OgreTextureGpuManager.h"
 
 #include "OgreTextureGpu.h"
@@ -53,15 +54,15 @@ namespace Ogre
 
         const GL3PlusSupport &mSupport;
 
-        TextureGpu *createTextureImpl( GpuPageOutStrategy::GpuPageOutStrategy pageOutStrategy,
-                                       IdString name, uint32 textureFlags,
-                                       TextureTypes::TextureTypes initialType ) override;
+        TextureGpu     *createTextureImpl( GpuPageOutStrategy::GpuPageOutStrategy pageOutStrategy,
+                                           IdString name, uint32 textureFlags,
+                                           TextureTypes::TextureTypes initialType ) override;
         StagingTexture *createStagingTextureImpl( uint32 width, uint32 height, uint32 depth,
                                                   uint32 slices, PixelFormatGpu pixelFormat ) override;
-        void destroyStagingTextureImpl( StagingTexture *stagingTexture ) override;
+        void            destroyStagingTextureImpl( StagingTexture *stagingTexture ) override;
 
         AsyncTextureTicket *createAsyncTextureTicketImpl( uint32 width, uint32 height,
-                                                          uint32 depthOrSlices,
+                                                          uint32                     depthOrSlices,
                                                           TextureTypes::TextureTypes textureType,
                                                           PixelFormatGpu pixelFormatFamily ) override;
 
@@ -72,12 +73,12 @@ namespace Ogre
 
         /** Creates a special GL3PlusTextureGpuWindow pointer, to be used by Ogre::Window.
             The pointer can be freed by a regular OGRE_DELETE. We do not track this pointer.
-            If caller doesnt' delete it, it will leak.
+            If caller doesn't delete it, it will leak.
         */
         TextureGpu *createTextureGpuWindow( GL3PlusContext *context, Window *window );
 
         /// See EglPBufferWindow. We do not track this pointer.
-        /// If caller doesnt' delete it, it will leak.
+        /// If caller doesn't delete it, it will leak.
         TextureGpu *createTextureGpuHeadlessWindow( GL3PlusContext *context, Window *window );
 
         GLuint getBlankTextureGlName( TextureTypes::TextureTypes textureType ) const;

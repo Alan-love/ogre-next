@@ -88,25 +88,26 @@ namespace Ogre
                              // device removed
         bool                       mInitialized;
         v1::HardwareBufferManager *mHardwareBufferManager;
-        MetalGpuProgramManager *   mShaderManager;
-        MetalProgramFactory *      mMetalProgramFactory;
+        MetalGpuProgramManager    *mShaderManager;
+        MetalProgramFactory       *mMetalProgramFactory;
 
         ConfigOptionMap mOptions;
 
         MetalPixelFormatToShaderType mPixelFormatToShaderType;
 
         __unsafe_unretained id<MTLBuffer> mIndirectBuffer;
-        unsigned char *                   mSwIndirectBufferPtr;
-        CachedDepthStencilStateVec        mDepthStencilStates;
-        MetalHlmsPso const *              mPso;
-        HlmsComputePso const *            mComputePso;
+        unsigned char                    *mSwIndirectBufferPtr;
+        CachedDepthStencilStateVec        mDepthStencilStates;  // GUARDED_BY( mMutexDepthStencilStates )
+        LightweightMutex                  mMutexDepthStencilStates;
+        MetalHlmsPso const               *mPso;
+        HlmsComputePso const             *mComputePso;
 
         bool     mStencilEnabled;
         uint32_t mStencilRefValue;
 
         // For v1 rendering.
-        v1::IndexData *  mCurrentIndexBuffer;
-        v1::VertexData * mCurrentVertexBuffer;
+        v1::IndexData   *mCurrentIndexBuffer;
+        v1::VertexData  *mCurrentVertexBuffer;
         MTLPrimitiveType mCurrentPrimType;
 
         // TODO: AutoParamsBuffer probably belongs to MetalDevice (because it's per device?)
@@ -114,12 +115,12 @@ namespace Ogre
 
         ConstBufferPackedVec mAutoParamsBuffer;
         size_t               mAutoParamsBufferIdx;
-        uint8 *              mCurrentAutoParamsBufferPtr;
+        uint8               *mCurrentAutoParamsBufferPtr;
         size_t               mCurrentAutoParamsBufferSpaceLeft;
         size_t               mHistoricalAutoParamsSize[60];
 
         MetalDeviceList     mDeviceList;
-        MetalDevice *       mActiveDevice;
+        MetalDevice        *mActiveDevice;
         __unsafe_unretained id<MTLRenderCommandEncoder> mActiveRenderEncoder;
 
         MetalDevice          mDevice;
@@ -155,6 +156,8 @@ namespace Ogre
         void             initConfigOptions();
         ConfigOptionMap &getConfigOptions() override { return mOptions; }
         void             setConfigOption( const String &name, const String &value ) override;
+
+        bool supportsMultithreadedShaderCompilation() const override;
 
         HardwareOcclusionQuery *createHardwareOcclusionQuery() override;
 
@@ -200,7 +203,7 @@ namespace Ogre
 
         void                     _setCurrentDeviceFromTexture( TextureGpu *texture ) override;
         MetalFrameBufferDescMap &_getFrameBufferDescMap() { return mFrameBufferDescMap; }
-        RenderPassDescriptor *   createRenderPassDescriptor() override;
+        RenderPassDescriptor    *createRenderPassDescriptor() override;
         void        beginRenderPassDescriptor( RenderPassDescriptor *desc, TextureGpu *anyTarget,
                                                uint8 mipLevel, const Vector4 *viewportSizes,
                                                const Vector4 *scissors, uint32 numViewports,
@@ -236,16 +239,16 @@ namespace Ogre
         void _beginFrame() override;
         void _endFrame() override;
 
-        void _hlmsPipelineStateObjectCreated( HlmsPso *newPso ) override;
+        bool _hlmsPipelineStateObjectCreated( HlmsPso *newPso, uint64 deadline ) override;
         void _hlmsPipelineStateObjectDestroyed( HlmsPso *pso ) override;
         void _hlmsSamplerblockCreated( HlmsSamplerblock *newBlock ) override;
         void _hlmsSamplerblockDestroyed( HlmsSamplerblock *block ) override;
 
     protected:
         template <typename TDescriptorSetTexture, typename TTexSlot, typename TBufferPacked, bool isUav>
-        void _descriptorSetTextureCreated( TDescriptorSetTexture *    newSet,
+        void _descriptorSetTextureCreated( TDescriptorSetTexture     *newSet,
                                            const FastArray<TTexSlot> &texContainer,
-                                           uint16 *                   shaderTypeTexCount );
+                                           uint16                    *shaderTypeTexCount );
         void destroyMetalDescriptorSetTexture( MetalDescriptorSetTexture *metalSet );
 
     public:
@@ -294,7 +297,8 @@ namespace Ogre
         unsigned int getDisplayMonitorCount() const override { return 1; }
 
         SampleDescription validateSampleDescription( const SampleDescription &sampleDesc,
-                                                     PixelFormatGpu           format ) override;
+                                                     PixelFormatGpu           format,
+                                                     uint32                   textureFlags ) override;
 
         const PixelFormatToShaderType *getPixelFormatToShaderType() const override;
 
@@ -311,7 +315,7 @@ namespace Ogre
 
         void setClipPlanesImpl( const PlaneList &clipPlanes ) override;
         void initialiseFromRenderSystemCapabilities( RenderSystemCapabilities *caps,
-                                                     Window *                  primary ) override;
+                                                     Window                   *primary ) override;
         void updateCompositorManager( CompositorManager2 *compositorManager ) override;
         void compositorWorkspaceBegin( CompositorWorkspace *workspace,
                                        const bool           forceBeginFrame ) override;

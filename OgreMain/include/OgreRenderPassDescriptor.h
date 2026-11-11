@@ -39,11 +39,11 @@ THE SOFTWARE.
 namespace Ogre
 {
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Resources
-    *  @{
-    */
+     *  @{
+     */
 
     namespace LoadAction
     {
@@ -63,16 +63,18 @@ namespace Ogre
             @remarks
                 This is useful for shadow map atlases. On desktop you probably
                 want to render to a 8192x8192 shadow map in the following way:
+                @code
                     clear( 0, 0, 8192, 8192 );
                     foreach( shadowmap in shadowmaps )
                         render( shadowmap.x, shadowmap.y, shadowmap.width, shadowmap.height );
-
+                @endcode
                 However this is heavily innefficient for tilers. In tilers you probably
                 want to do the following:
+                @code
                     foreach( shadowmap in shadowmaps )
                         clear( shadowmap.x, shadowmap.y, shadowmap.width, shadowmap.height );
                         render( shadowmap.x, shadowmap.y, shadowmap.width, shadowmap.height );
-
+                @endcode
                 ClearOnTilers allows you to perform the most efficient shadow map rendering
                 on both tilers & non-tilers using the same compositor script, provided the
                 full clear pass was set to only execute on non-tilers.
@@ -116,22 +118,22 @@ namespace Ogre
 
     struct _OgreExport RenderPassTargetBase
     {
-        TextureGpu  *texture;
-        TextureGpu  *resolveTexture;
+        TextureGpu *texture;
+        TextureGpu *resolveTexture;
 
-        uint8       mipLevel;
-        uint8       resolveMipLevel;
+        uint8 mipLevel;
+        uint8 resolveMipLevel;
 
-        uint16      slice;
-        uint16      resolveSlice;
+        uint16 slice;
+        uint16 resolveSlice;
 
-        LoadAction::LoadAction      loadAction;
-        StoreAction::StoreAction    storeAction;
+        LoadAction::LoadAction   loadAction;
+        StoreAction::StoreAction storeAction;
 
         RenderPassTargetBase();
 
-        bool operator != ( const RenderPassTargetBase &other ) const;
-        bool operator < ( const RenderPassTargetBase &other ) const;
+        bool operator!=( const RenderPassTargetBase &other ) const;
+        bool operator<( const RenderPassTargetBase &other ) const;
     };
 
     struct _OgreExport RenderPassColourTarget : RenderPassTargetBase
@@ -139,41 +141,41 @@ namespace Ogre
         ColourValue clearColour;
         /// When true, slice will be ignored, and
         /// all slices will be attached instead.
-        bool        allLayers;
+        bool allLayers;
         RenderPassColourTarget();
     };
     struct _OgreExport RenderPassDepthTarget : RenderPassTargetBase
     {
-        Real    clearDepth;
+        Real clearDepth;
         /// Assume attachment is read only (it's a hint, not an enforcement)
-        bool    readOnly;
+        bool readOnly;
         RenderPassDepthTarget();
     };
     struct _OgreExport RenderPassStencilTarget : RenderPassTargetBase
     {
-        uint32  clearStencil;
+        uint32 clearStencil;
         /// Assume attachment is read only (it's a hint, not an enforcement)
-        bool    readOnly;
+        bool readOnly;
         RenderPassStencilTarget();
     };
 
-    class _OgreExport RenderPassDescriptor : public RenderSysAlloc
+    class _OgreExport RenderPassDescriptor : public OgreAllocatedObj
     {
     public:
         enum EntryTypes
         {
-            Colour0     = 1u << 0u,
-            Colour1     = 1u << 1u,
-            Colour2     = 1u << 2u,
-            Colour3     = 1u << 3u,
-            Colour4     = 1u << 4u,
-            Colour5     = 1u << 5u,
-            Colour6     = 1u << 6u,
-            Colour7     = 1u << 7u,
-            Depth       = 1u << 30u,
-            Stencil     = 1u << 31u,
-            Colour      = Colour0|Colour1|Colour2|Colour3|Colour4|Colour5|Colour6|Colour7,
-            All         = Colour|Depth|Stencil
+            Colour0 = 1u << 0u,
+            Colour1 = 1u << 1u,
+            Colour2 = 1u << 2u,
+            Colour3 = 1u << 3u,
+            Colour4 = 1u << 4u,
+            Colour5 = 1u << 5u,
+            Colour6 = 1u << 6u,
+            Colour7 = 1u << 7u,
+            Depth = 1u << 30u,
+            Stencil = 1u << 31u,
+            Colour = Colour0 | Colour1 | Colour2 | Colour3 | Colour4 | Colour5 | Colour6 | Colour7,
+            All = Colour | Depth | Stencil
         };
 
         RenderPassColourTarget  mColour[OGRE_MAX_MULTIPLE_RENDER_TARGETS];
@@ -181,24 +183,31 @@ namespace Ogre
         RenderPassStencilTarget mStencil;
 
     protected:
-        uint8                   mNumColourEntries;
-        bool                    mRequiresTextureFlipping;
+        uint8 mNumColourEntries;
+        bool  mRequiresTextureFlipping;
         /// When true, if we have a RenderWindow among our colour entries, then this
         /// pass is the last one to render to it and should ready the surface for
         /// presentation/swapping. After changing this flag you MUST call entriesModified( Colour );
         ///
         /// This value will be automatically reset to false if no entry is a RenderWindow
-        public: bool            mReadyWindowForPresent;
+    public:
+        bool mReadyWindowForPresent;
         /// When true, beginRenderPassDescriptor & endRenderPassDescriptor won't actually
         /// load/store this pass descriptor; but will still set the mCurrentRenderPassDescriptor
         /// so we have required information by some passes.
         /// Examples of these are stencil passes.
-        public: bool            mInformationOnly;
+    public:
+        bool mInformationOnly;
 
     public:
         void checkWarnIfRtvWasFlushed( uint32 entriesToFlush );
+
     protected:
-        void checkRequiresTextureFlipping();
+        void         checkRequiresTextureFlipping();
+        void         validateMemorylessTexture( const TextureGpu              *texture,
+                                                const LoadAction::LoadAction   loadAction,
+                                                const StoreAction::StoreAction storeAction,
+                                                const bool                     bIsDepthStencil );
         virtual void colourEntriesModified();
 
     public:
@@ -230,8 +239,8 @@ namespace Ogre
 
         bool hasAttachment( const TextureGpu *texture ) const;
 
-        uint8 getNumColourEntries() const       { return mNumColourEntries; }
-        bool requiresTextureFlipping() const    { return mRequiresTextureFlipping; }
+        uint8 getNumColourEntries() const { return mNumColourEntries; }
+        bool  requiresTextureFlipping() const { return mRequiresTextureFlipping; }
         /// Returns true if either Stencil is set, or if Depth is set with depth-stencil attachment.
         bool hasStencilFormat() const;
 
@@ -254,22 +263,22 @@ namespace Ogre
 
     struct _OgreExport FrameBufferDescKey
     {
-        bool                    readyWindowForPresent;
-        uint8                   numColourEntries;
-        bool                    allLayers[OGRE_MAX_MULTIPLE_RENDER_TARGETS];
-        RenderPassTargetBase    colour[OGRE_MAX_MULTIPLE_RENDER_TARGETS];
-        RenderPassTargetBase    depth;
-        RenderPassTargetBase    stencil;
+        bool                 readyWindowForPresent;
+        uint8                numColourEntries;
+        bool                 allLayers[OGRE_MAX_MULTIPLE_RENDER_TARGETS];
+        RenderPassTargetBase colour[OGRE_MAX_MULTIPLE_RENDER_TARGETS];
+        RenderPassTargetBase depth;
+        RenderPassTargetBase stencil;
 
         FrameBufferDescKey();
         FrameBufferDescKey( const RenderPassDescriptor &desc );
 
-        bool operator < ( const FrameBufferDescKey &other ) const;
+        bool operator<( const FrameBufferDescKey &other ) const;
     };
 
     /** @} */
     /** @} */
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

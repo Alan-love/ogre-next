@@ -28,6 +28,7 @@ Copyright (c) 2000-present Torus Knot Software Ltd
 
 #include "Windowing/X11/OgreVulkanXcbSupport.h"
 
+#include "OgreException.h"
 #include "OgreLogManager.h"
 #include "OgreString.h"
 
@@ -124,8 +125,7 @@ namespace Ogre
         ConfigOption optVSync;
         ConfigOption optVSyncInterval;
         ConfigOption optVSyncMethod;
-        ConfigOption optFSAA;
-        ConfigOption optSRGB;
+        ConfigOption optAllowMemoryless;
 
         // FS setting possibilities
         optFullScreen.name = "Full Screen";
@@ -150,7 +150,16 @@ namespace Ogre
             ++itor;
         }
         if( !optVideoMode.possibleValues.empty() )
+        {
             optVideoMode.currentValue = optVideoMode.possibleValues.front();
+        }
+        else
+        {
+            // No video modes (no X display, or no monitor connected). Fullscreen is not possible
+            // and refreshConfig() would throw "Malformed resolution string" on the empty Video Mode,
+            // so default to windowed mode to let the RenderSystem load (e.g. for headless rendering).
+            optFullScreen.currentValue = "No";
+        }
 
         optDisplayFrequency.name = "Display Frequency";
         optDisplayFrequency.immutable = false;
@@ -176,31 +185,11 @@ namespace Ogre
         optVSyncMethod.possibleValues.push_back( "Lowest Latency" );
         optVSyncMethod.currentValue = optVSyncMethod.possibleValues.front();
 
-        optFSAA.name = "FSAA";
-        optFSAA.immutable = false;
-        optFSAA.possibleValues.push_back( "1" );
-        optFSAA.possibleValues.push_back( "2" );
-        optFSAA.possibleValues.push_back( "4" );
-        optFSAA.possibleValues.push_back( "8" );
-        optFSAA.possibleValues.push_back( "16" );
-        //        for( vector<int>::type::iterator it = mFSAALevels.begin(); it != mFSAALevels.end();
-        //        ++it )
-        //        {
-        //            String val = StringConverter::toString( *it );
-        //            optFSAA.possibleValues.push_back( val );
-        //            /* not implementing CSAA in GL for now
-        //            if (*it >= 8)
-        //                optFSAA.possibleValues.push_back(val + " [Quality]");
-        //            */
-        //        }
-        optFSAA.currentValue = "1";
-
-        // SRGB on auto window
-        optSRGB.name = "sRGB Gamma Conversion";
-        optSRGB.possibleValues.push_back( "Yes" );
-        optSRGB.possibleValues.push_back( "No" );
-        optSRGB.currentValue = "Yes";
-        optSRGB.immutable = false;
+        optAllowMemoryless.name = "Allow Memoryless RTT";
+        optAllowMemoryless.immutable = false;
+        optAllowMemoryless.possibleValues.push_back( "Yes" );
+        optAllowMemoryless.possibleValues.push_back( "No" );
+        optAllowMemoryless.currentValue = optAllowMemoryless.possibleValues.front();
 
         mOptions[optFullScreen.name] = optFullScreen;
         mOptions[optVideoMode.name] = optVideoMode;
@@ -208,8 +197,7 @@ namespace Ogre
         mOptions[optVSync.name] = optVSync;
         mOptions[optVSyncInterval.name] = optVSyncInterval;
         mOptions[optVSyncMethod.name] = optVSyncMethod;
-        mOptions[optFSAA.name] = optFSAA;
-        mOptions[optSRGB.name] = optSRGB;
+        mOptions[optAllowMemoryless.name] = optAllowMemoryless;
 
         refreshConfig();
     }
@@ -324,4 +312,8 @@ namespace Ogre
             }
         }
     }
+    //-------------------------------------------------------------------------
+    IdString VulkanXcbSupport::getInterfaceName() const { return "xcb"; }
+    //-------------------------------------------------------------------------
+    String VulkanXcbSupport::getInterfaceNameStr() const { return "xcb"; }
 }  // namespace Ogre

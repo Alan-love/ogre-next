@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "OgreMetalDevice.h"
 #include "OgreMetalMappings.h"
 #include "OgreMetalTextureGpuManager.h"
+#include "OgreRenderSystem.h"
 #include "OgreStringConverter.h"
 #include "OgreTextureBox.h"
 #include "OgreTextureGpuListener.h"
@@ -79,6 +80,12 @@ namespace Ogre
         if( mTextureType == TextureTypes::TypeCube || mTextureType == TextureTypes::TypeCubeArray )
             desc.arrayLength /= 6u;
 
+        const bool bAllowMemoryless = mTextureManager->allowMemoryless();
+        if( bAllowMemoryless && isTilerMemoryless() )
+        {
+            if( @available( iOS 10, macOS 11, * ) )
+                desc.storageMode = MTLStorageModeMemoryless;
+        }
         if( isMultisample() && hasMsaaExplicitResolves() )
         {
             desc.textureType = MTLTextureType2DMultisample;
@@ -108,10 +115,17 @@ namespace Ogre
                              StringConverter::toString( sizeBytes ) + " bytes.",
                          "MetalTextureGpu::createInternalResourcesImpl" );
         }
-        mFinalTextureName.label = [NSString stringWithUTF8String:textureName.c_str()];
+        mFinalTextureName.label = @( textureName.c_str() );
 
         if( isMultisample() && !hasMsaaExplicitResolves() )
         {
+            if( bAllowMemoryless )
+            {
+                // mMsaaFramebufferName is always Memoryless because the user *NEVER* has access to it
+                // and we always auto-resolve in the same pass, thus MSAA contents are always transient.
+                if( @available( iOS 10, macOS 11, * ) )
+                    desc.storageMode = MTLStorageModeMemoryless;
+            }
             desc.textureType = MTLTextureType2DMultisample;
             desc.depth = 1u;
             desc.arrayLength = 1u;
@@ -129,8 +143,7 @@ namespace Ogre
                                  StringConverter::toString( sizeBytes ) + " bytes.",
                              "MetalTextureGpu::createInternalResourcesImpl" );
             }
-            mMsaaFramebufferName.label =
-                [NSString stringWithUTF8String:( textureName + "_MSAA" ).c_str()];
+            mMsaaFramebufferName.label = @( ( textureName + "_MSAA" ).c_str() );
         }
     }
     //-----------------------------------------------------------------------------------
@@ -409,11 +422,12 @@ namespace Ogre
     {
         if( name == msFinalTextureBuffer )
         {
-            *static_cast<void **>( pData ) = (void *)CFBridgingRetain( mFinalTextureName );
+            *static_cast<const void **>( pData ) = (const void *)CFBridgingRetain( mFinalTextureName );
         }
         else if( name == msMsaaTextureBuffer )
         {
-            *static_cast<void **>( pData ) = (void *)CFBridgingRetain( mMsaaFramebufferName );
+            *static_cast<const void **>( pData ) =
+                (const void *)CFBridgingRetain( mMsaaFramebufferName );
         }
     }
 
@@ -468,4 +482,4 @@ namespace Ogre
 #if OGRE_NO_VIEWPORT_ORIENTATIONMODE == 0
     OrientationMode MetalTextureGpuRenderTarget::getOrientationMode() const { return mOrientationMode; }
 #endif
-}
+}  // namespace Ogre

@@ -33,6 +33,7 @@ THE SOFTWARE.
 
 #include "OgreHlmsPso.h"
 #include "OgreRenderSystem.h"
+#include "OgreVulkanDeviceResource.h"
 #include "OgreVulkanGlobalBindingTable.h"
 #include "OgreVulkanPixelFormatToShaderType.h"
 #include "OgreVulkanProgram.h"
@@ -47,15 +48,30 @@ namespace Ogre
         class HardwareBufferManager;
     }
 
+    struct VulkanExternalInstance;
     struct VulkanHlmsPso;
     class VulkanSupport;
+    class VulkanInstance;
+
+    struct VulkanPhysicalDevice
+    {
+        VkPhysicalDevice physicalDevice;
+        uint64 physicalDeviceID[2];
+        VkDriverId driverID;
+        uint32 apiVersion;
+        String title;
+    };
 
     /**
        Implementation of Vulkan as a rendering system.
     */
-    class _OgreVulkanExport VulkanRenderSystem final : public RenderSystem
+    class _OgreVulkanExport VulkanRenderSystem final : public RenderSystem,
+                                                       protected VulkanDeviceResourceManager
     {
         bool mInitialized;
+#ifdef OGRE_VULKAN_USE_SWAPPY
+        bool mSwappyFramePacing;
+#endif
         v1::HardwareBufferManager *mHardwareBufferManager;
 
         VulkanPixelFormatToShaderType mPixelFormatToShaderType;
@@ -69,23 +85,24 @@ namespace Ogre
         VulkanProgramFactory *mVulkanProgramFactory2;
         VulkanProgramFactory *mVulkanProgramFactory3;
 
-        VkInstance mVkInstance;
+        std::shared_ptr<VulkanInstance> mInstance;
+        VulkanPhysicalDevice mActiveDevice;
+
         VulkanSupport *mVulkanSupport;
+        std::map<IdString, VulkanSupport *> mAvailableVulkanSupports;
 
         // TODO: AutoParamsBuffer probably belongs to MetalDevice (because it's per device?)
         typedef vector<ConstBufferPacked *>::type ConstBufferPackedVec;
         ConstBufferPackedVec mAutoParamsBuffer;
+        size_t mFirstUnflushedAutoParamsBuffer;
         size_t mAutoParamsBufferIdx;
         uint8 *mCurrentAutoParamsBufferPtr;
         size_t mCurrentAutoParamsBufferSpaceLeft;
-        size_t mHistoricalAutoParamsSize[60];
 
         // For v1 rendering.
         v1::IndexData *mCurrentIndexBuffer;
         v1::VertexData *mCurrentVertexBuffer;
         VkPrimitiveTopology mCurrentPrimType;
-
-        VulkanDevice *mActiveDevice;
 
         VulkanDevice *mDevice;
 
@@ -119,53 +136,40 @@ namespace Ogre
 
         bool mValidationError;
 
-#if OGRE_PLATFORM == OGRE_PLATFORM_WIN32
-        bool mHasWin32Support;
-#elif OGRE_PLATFORM == OGRE_PLATFORM_ANDROID
-        bool mHasAndroidSupport;
-#else
-        bool mHasXcbSupport;
-#endif
-#if OGRE_DEBUG_MODE >= OGRE_DEBUG_HIGH
-        bool mHasValidationLayers;
-#endif
-
-        PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback;
-        PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallback;
-        VkDebugReportCallbackEXT mDebugReportCallback;
-
-#if OGRE_DEBUG_MODE >= OGRE_DEBUG_MEDIUM
-        PFN_vkCmdBeginDebugUtilsLabelEXT CmdBeginDebugUtilsLabelEXT;
-        PFN_vkCmdEndDebugUtilsLabelEXT CmdEndDebugUtilsLabelEXT;
-#endif
-
         /// Declared here to avoid constant reallocations
         FastArray<VkImageMemoryBarrier> mImageBarriers;
-
-        void addInstanceDebugCallback();
 
         /// Creates a dummy VkRenderPass for use in PSO creation
         VkRenderPass getVkRenderPass( HlmsPassPso passPso, uint8 &outMrtCount );
 
-        void bindDescriptorSet() const;
-
         void flushRootLayout();
         void flushRootLayoutCS();
 
+        void createVkResources();
+        void destroyVkResources0();
+        void destroyVkResources1();
+
     public:
-        VulkanRenderSystem();
+        VulkanRenderSystem( const NameValuePairList *options );
         ~VulkanRenderSystem() override;
 
         void shutdown() override;
+        const FastArray<VulkanPhysicalDevice> &getVulkanPhysicalDevices() const;
+        const VulkanPhysicalDevice &getActiveVulkanPhysicalDevice() const { return mActiveDevice; }
+        bool isDeviceLost() override;
+        bool validateDevice( bool forceDeviceElection = false ) override;
+        void handleDeviceLost();
 
         const String &getName() const override;
         const String &getFriendlyName() const override;
-        void refreshConfig();
         void initConfigOptions();
         ConfigOptionMap &getConfigOptions() override;
         void setConfigOption( const String &name, const String &value ) override;
         const char *getPriorityConfigOption( size_t idx ) const override;
         size_t getNumPriorityConfigOptions() const override;
+        bool supportsMultithreadedShaderCompilation() const override;
+        void loadPipelineCache( DataStreamPtr stream ) override;
+        void savePipelineCache( DataStreamPtr stream ) const override;
 
         HardwareOcclusionQuery *createHardwareOcclusionQuery() override;
 
@@ -173,13 +177,26 @@ namespace Ogre
 
         RenderSystemCapabilities *createRenderSystemCapabilities() const override;
 
+        /** ANDROID ONLY: Whether to enable/disable Swappy frame pacing.
+            It may be disabled by OgreNext if Swappy is causing bugs on the current device.
+
+            Users can cache the value of getSwappyFramePacing() on shutdown to force-disable
+            on the next run.
+
+            This call is ignored in other platforms.
+        @param bEnable
+            Whether to enable or disable.
+        @param callingWindow
+            For internal use. Leave this set as nullptr.
+        */
+        void setSwappyFramePacing( bool bEnable, Window *callingWindow = 0 );
+
+        /// ANDROID ONLY: Whether Swappy is enabled. See setSwappyFramePacing().
+        bool getSwappyFramePacing() const;
+
         void resetAllBindings();
 
         void reinitialise() override;
-
-        void initializeVkInstance();
-
-        VkInstance getVkInstance() const { return mVkInstance; }
 
         Window *_initialise( bool autoCreateWindow,
                              const String &windowTitle = "OGRE Render Window" ) override;
@@ -209,6 +226,9 @@ namespace Ogre
         void _setTexBuffer( size_t slot, VkBufferView bufferView );
         void _setTexBufferCS( size_t slot, VkBufferView bufferView );
         void _setReadOnlyBuffer( size_t slot, const VkDescriptorBufferInfo &bufferInfo );
+#ifdef OGRE_VK_WORKAROUND_ADRENO_6xx_READONLY_IS_TBUFFER
+        void _setReadOnlyBuffer( size_t slot, VkBufferView bufferView );
+#endif
 
         void _setCurrentDeviceFromTexture( TextureGpu *texture ) override;
         void _setTexture( size_t unit, TextureGpu *texPtr, bool bDepthReadOnly ) override;
@@ -250,14 +270,9 @@ namespace Ogre
         void _dispatch( const HlmsComputePso &pso ) override;
 
         void _setVertexArrayObject( const VertexArrayObject *vao ) override;
-        void flushDescriptorState(
-            VkPipelineBindPoint pipeline_bind_point, const VulkanConstBufferPacked &constBuffer,
-            const size_t bindOffset, const size_t bytesToWrite,
-            const unordered_map<unsigned, VulkanConstantDefinitionBindingParam>::type &shaderBindings );
 
         void _render( const CbDrawCallIndexed *cmd ) override;
         void _render( const CbDrawCallStrip *cmd ) override;
-        void bindDescriptorSet( VulkanVaoManager *&vaoManager );
         void _renderEmulated( const CbDrawCallIndexed *cmd ) override;
         void _renderEmulated( const CbDrawCallStrip *cmd ) override;
 
@@ -270,6 +285,39 @@ namespace Ogre
         void bindGpuProgramParameters( GpuProgramType gptype, GpuProgramParametersSharedPtr params,
                                        uint16 variabilityMask ) override;
         void bindGpuProgramPassIterationParameters( GpuProgramType gptype ) override;
+
+        /** Low Level Materials use a params buffer to pass all uniforms. We emulate this using a large
+            const buffer to which we write to and bind the regions we need.
+            This is done in bindGpuProgramParameters().
+
+            When it runs out of space, we create another one (see mAutoParamsBuffer).
+
+            However:
+                - In all cases we must flush buffers before command submission or else the cmds we're
+                  about to execute may not see the const buffer data up to date. We don't flush in
+                  bindGpuProgramParameters() because we could end up with lots of 4-byte flushes
+                  which is seriously inefficient. Flushing the whole thing once at the end is better.
+                - We musn't grow indefinitely. On submissionType >= NewFrameIdx, we
+                  are certain we can set mAutoParamsBufferIdx = 0 and start over.
+        @remarks
+            bindGpuProgramParameters() tries to use BT_DYNAMIC_PERSISTENT_COHERENT which doesn't need
+            flushing (thus we'd only care about submissionType >= NewFrameIdx to reuse memory).
+
+            However VaoManager cannot guarantee BT_DYNAMIC_PERSISTENT_COHERENT will actually be
+            coherent thus we must call unmap( UO_KEEP_PERSISTENT ) anyway.
+        @param submissionType
+            See SubmissionType::SubmissionType.
+        */
+        void flushBoundGpuProgramParameters( const SubmissionType::SubmissionType submissionType );
+
+    public:
+        /** All pending or queued buffer flushes (i.e. calls to vkFlushMappedMemoryRanges) must be done
+            now because we're about to submit commands for execution; and they need to see those
+            regions flushed.
+        @param submissionType
+            See SubmissionType::SubmissionType.
+        */
+        void flushPendingNonCoherentFlushes( const SubmissionType::SubmissionType submissionType );
 
         void clearFrameBuffer( RenderPassDescriptor *renderPassDesc, TextureGpu *anyTarget,
                                uint8 mipLevel ) override;
@@ -301,7 +349,11 @@ namespace Ogre
         void beginGPUSampleProfile( const String &name, uint32 *hashCache ) override;
         void endGPUSampleProfile( const String &name ) override;
 
+        void endGpuDebuggerFrameCapture( Window *window, const bool bDiscard = false ) override;
+
         bool hasAnisotropicMipMapFilter() const override { return true; }
+
+        void getCustomAttribute( const String &name, void *pData ) override;
 
         void setClipPlanesImpl( const PlaneList &clipPlanes ) override;
         void initialiseFromRenderSystemCapabilities( RenderSystemCapabilities *caps,
@@ -327,7 +379,7 @@ namespace Ogre
         void endCopyEncoder() override;
         void executeResourceTransition( const ResourceTransitionArray &rstCollection ) override;
 
-        void _hlmsPipelineStateObjectCreated( HlmsPso *newPso ) override;
+        bool _hlmsPipelineStateObjectCreated( HlmsPso *newPso, uint64 deadline ) override;
         void _hlmsPipelineStateObjectDestroyed( HlmsPso *pos ) override;
         void _hlmsMacroblockCreated( HlmsMacroblock *newBlock ) override;
         void _hlmsMacroblockDestroyed( HlmsMacroblock *block ) override;
@@ -345,7 +397,8 @@ namespace Ogre
         void _descriptorSetUavDestroyed( DescriptorSetUav *set ) override;
 
         SampleDescription validateSampleDescription( const SampleDescription &sampleDesc,
-                                                     PixelFormatGpu format ) override;
+                                                     PixelFormatGpu format,
+                                                     uint32 textureFlags ) override;
         VulkanDevice *getVulkanDevice() const { return mDevice; }
         void _notifyDeviceStalled();
 

@@ -26,74 +26,105 @@ THE SOFTWARE.
 -----------------------------------------------------------------------------
 */
 #include "OgreScaleAffector.h"
+
+#include "OgreParticle.h"
 #include "OgreParticleSystem.h"
 #include "OgreStringConverter.h"
-#include "OgreParticle.h"
 
-
-namespace Ogre {
-    
+namespace Ogre
+{
     // init statics
     ScaleAffector::CmdScaleAdjust ScaleAffector::msScaleCmd;
-
+    ScaleAffector::CmdMultiplyMode ScaleAffector::msMultiplyModeCmd;
     //-----------------------------------------------------------------------
-    ScaleAffector::ScaleAffector(ParticleSystem* psys)
-        :ParticleAffector(psys)
+    ScaleAffector::ScaleAffector( ParticleSystem *psys ) :
+        ParticleAffector( psys ),
+        mMultiplyMode( false )
     {
         mScaleAdj = 0;
         mType = "Scaler";
 
         // Init parameters
-        if (createParamDictionary("ScaleAffector"))
+        if( createParamDictionary( "ScaleAffector" ) )
         {
-            ParamDictionary* dict = getParamDictionary();
+            ParamDictionary *dict = getParamDictionary();
 
-            dict->addParameter(ParameterDef("rate", 
-                "The amount by which to adjust the x and y scale components of particles per second.",
-                PT_REAL), &msScaleCmd);
+            dict->addParameter( ParameterDef( "rate",
+                                              "The amount by which to adjust the x and y scale "
+                                              "components of particles per second.",
+                                              PT_REAL ),
+                                &msScaleCmd );
+
+            dict->addParameter( ParameterDef( "multiply_mode",
+                                              "When false (default), we do scale += factor * time. "
+                                              "When true, we do scale *= pow( factor, time ).",
+                                              PT_BOOL ),
+                                &msMultiplyModeCmd );
         }
     }
     //-----------------------------------------------------------------------
-    void ScaleAffector::_affectParticles(ParticleSystem* pSystem, Real timeElapsed)
+    void ScaleAffector::_affectParticles( ParticleSystem *pSystem, Real timeElapsed )
     {
         ParticleIterator pi = pSystem->_getIterator();
         Particle *p;
         Real ds;
 
         // Scale adjustments by time
-        ds = mScaleAdj * timeElapsed;
-
-        Real NewWide, NewHigh;
-
-        while (!pi.end())
+        if( mMultiplyMode )
         {
-            p = pi.getNext();
+            ds = std::pow( mScaleAdj, timeElapsed );
 
-            if( p->hasOwnDimensions() == false )
+            while( !pi.end() )
             {
-                NewWide = pSystem->getDefaultWidth() + ds;
-                NewHigh = pSystem->getDefaultHeight() + ds;
+                p = pi.getNext();
 
+                Real NewWide, NewHigh;
+
+                if( p->hasOwnDimensions() == false )
+                {
+                    NewWide = pSystem->getDefaultWidth() * ds;
+                    NewHigh = pSystem->getDefaultHeight() * ds;
+                }
+                else
+                {
+                    NewWide = p->getOwnWidth() * ds;
+                    NewHigh = p->getOwnHeight() * ds;
+                }
+                p->setDimensions( NewWide, NewHigh );
             }
-            else
-            {
-                NewWide = p->getOwnWidth()  + ds;
-                NewHigh = p->getOwnHeight() + ds;
-            }
-            p->setDimensions( NewWide, NewHigh ); 
         }
+        else
+        {
+            ds = mScaleAdj * timeElapsed;
 
+            while( !pi.end() )
+            {
+                p = pi.getNext();
+
+                Real NewWide, NewHigh;
+
+                if( p->hasOwnDimensions() == false )
+                {
+                    NewWide = pSystem->getDefaultWidth() + ds;
+                    NewHigh = pSystem->getDefaultHeight() + ds;
+                }
+                else
+                {
+                    NewWide = p->getOwnWidth() + ds;
+                    NewHigh = p->getOwnHeight() + ds;
+                }
+                p->setDimensions( NewWide, NewHigh );
+            }
+        }
     }
     //-----------------------------------------------------------------------
-    void ScaleAffector::setAdjust( Real rate )
-    {
-        mScaleAdj = rate;
-    }
+    void ScaleAffector::setAdjust( Real rate ) { mScaleAdj = rate; }
     //-----------------------------------------------------------------------
-    Real ScaleAffector::getAdjust() const
-    {
-        return mScaleAdj;
-    }
+    Real ScaleAffector::getAdjust() const { return mScaleAdj; }
+    //-----------------------------------------------------------------------------
+    void ScaleAffector::setMultiplyMode( bool bMultiplyMode ) { mMultiplyMode = bMultiplyMode; }
+    //-----------------------------------------------------------------------------
+    bool ScaleAffector::getMultiplyMode() const { return mMultiplyMode; }
     //-----------------------------------------------------------------------
 
     //-----------------------------------------------------------------------
@@ -101,18 +132,23 @@ namespace Ogre {
     // Command objects
     //-----------------------------------------------------------------------
     //-----------------------------------------------------------------------
-    String ScaleAffector::CmdScaleAdjust::doGet(const void* target) const
+    String ScaleAffector::CmdScaleAdjust::doGet( const void *target ) const
+    {
+        return StringConverter::toString( static_cast<const ScaleAffector *>( target )->getAdjust() );
+    }
+    void ScaleAffector::CmdScaleAdjust::doSet( void *target, const String &val )
+    {
+        static_cast<ScaleAffector *>( target )->setAdjust( StringConverter::parseReal( val ) );
+    }
+    //-----------------------------------------------------------------------------
+    String ScaleAffector::CmdMultiplyMode::doGet( const void *target ) const
     {
         return StringConverter::toString(
-            static_cast<const ScaleAffector*>(target)->getAdjust() );
+            static_cast<const ScaleAffector *>( target )->getMultiplyMode() );
     }
-    void ScaleAffector::CmdScaleAdjust::doSet(void* target, const String& val)
+    void ScaleAffector::CmdMultiplyMode::doSet( void *target, const String &val )
     {
-        static_cast<ScaleAffector*>(target)->setAdjust(
-            StringConverter::parseReal(val));
+        static_cast<ScaleAffector *>( target )->setMultiplyMode( StringConverter::parseBool( val ) );
     }
 
-}
-
-
-
+}  // namespace Ogre

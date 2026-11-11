@@ -30,20 +30,18 @@ THE SOFTWARE.
 
 #include "OgreRadialDensityMask.h"
 
+#include "OgreHlmsCompute.h"
+#include "OgreHlmsComputeJob.h"
+#include "OgreHlmsManager.h"
 #include "OgreMaterialManager.h"
 #include "OgrePass.h"
 #include "OgreRectangle2D2.h"
 #include "OgreSceneManager.h"
+#include "OgreShaderPrimitives.h"
 #include "OgreTechnique.h"
-
-#include "OgreHlmsCompute.h"
-#include "OgreHlmsComputeJob.h"
-#include "OgreHlmsManager.h"
 #include "Vao/OgreConstBufferPacked.h"
 #include "Vao/OgreVaoManager.h"
 #include "Vao/OgreVertexArrayObject.h"
-
-#include "OgreShaderPrimitives.h"
 
 namespace Ogre
 {
@@ -67,15 +65,13 @@ namespace Ogre
     {
         memcpy( mRadius, radius, sizeof( mRadius ) );
 
-        mRectangle =
-            OGRE_NEW Rectangle2D( Id::generateNewId<MovableObject>(),
-                                  &sceneManager->_getEntityMemoryManager( SCENE_STATIC ), sceneManager );
+        mRectangle = sceneManager->createRectangle2D( SCENE_STATIC );
 
         mRectangle->setHollowRectRadius( mRadius[0] );
         mRectangle->setGeometry( mLeftEyeCenter, mRightEyeCenter );
         mRectangle->initialize(
             BT_IMMUTABLE, Rectangle2D::GeometryFlagStereo | Rectangle2D::GeometryFlagHollowFsRect );
-        mRectangle->setRenderQueueGroup( 0u ); // Render first!
+        mRectangle->setRenderQueueGroup( 0u );  // Render first!
 
         const String baseMatName = "Ogre/VR/RadialDensityMask";
         const String matName = baseMatName + StringConverter::toString( sceneManager->getId() );
@@ -128,7 +124,7 @@ namespace Ogre
 
         VaoManager *vaoManager = sceneManager->getDestinationRenderSystem()->getVaoManager();
         mJobParams = vaoManager->createConstBuffer(
-            alignToNextMultiple( sizeof( RdmShaderParams ), 16u ), BT_DEFAULT, 0, false );
+            alignToNextMultiple<size_t>( sizeof( RdmShaderParams ), 16u ), BT_DEFAULT, 0, false );
         mReconstructJob->setConstBuffer( 0, mJobParams );
 
         setQuality( RdmHigh );
@@ -144,7 +140,8 @@ namespace Ogre
         MaterialPtr material = mRectangle->getMaterial();
         MaterialManager::getSingleton().remove( material );
 
-        OGRE_DELETE mRectangle;
+        SceneManager *sceneManager = mRectangle->_getManager();
+        sceneManager->destroyRectangle2D( mRectangle );
         mRectangle = 0;
     }
     //-------------------------------------------------------------------------
@@ -175,11 +172,11 @@ namespace Ogre
         setEyeCenter( &leftEyeCenter_rightEyeCenter[2], mRightEyeCenter, viewports[1] );
 
         Vector4 rightEyeStart_radius;
-        rightEyeStart_radius.x = viewports[1].getActualLeft();
+        rightEyeStart_radius.x = (Real)viewports[1].getActualLeft();
         for( size_t i = 0u; i < 3u; ++i )
             rightEyeStart_radius[i + 1u] = mRadius[i] * 0.5f;
 
-        const Vector2 invBlockResolution( 8.0f / width, 8.0f / height );
+        const Vector2 invBlockResolution( 8.0f / Real( width ), 8.0f / Real( height ) );
 
         mPsParams->setNamedConstant( "leftEyeCenter_rightEyeCenter", leftEyeCenter_rightEyeCenter );
         mPsParams->setNamedConstant( "rightEyeStart_radius", rightEyeStart_radius );
@@ -189,7 +186,7 @@ namespace Ogre
         shaderParams.rightEyeStart_radius = rightEyeStart_radius;
         shaderParams.leftEyeCenter_rightEyeCenter = leftEyeCenter_rightEyeCenter;
         shaderParams.invBlockResolution_invResolution =
-            float4( invBlockResolution, Vector2( 1.0f / width, 1.0f / height ) );
+            float4( invBlockResolution, Vector2( 1.0f / float( width ), 1.0f / float( height ) ) );
         mJobParams->upload( &shaderParams, 0, sizeof( shaderParams ) );
 
         const uint32 threadGroupsX = ( (uint32)width + mReconstructJob->getThreadsPerGroupX() - 1u ) /
@@ -226,10 +223,9 @@ namespace Ogre
             MaterialPtr material = mRectangle->getMaterial();
             SceneManager *sceneManager = mRectangle->_getManager();
 
-            OGRE_DELETE mRectangle;
-            mRectangle = OGRE_NEW Rectangle2D( Id::generateNewId<MovableObject>(),
-                                               &sceneManager->_getEntityMemoryManager( SCENE_STATIC ),
-                                               sceneManager );
+            sceneManager->destroyRectangle2D( mRectangle );
+            mRectangle = 0;
+            mRectangle = sceneManager->createRectangle2D( SCENE_STATIC );
 
             mRectangle->setHollowRectRadius( mRadius[0] );
             mRectangle->initialize(

@@ -119,7 +119,7 @@ namespace Ogre
         for( size_t i = 0u; i < numPoolSizes; ++i )
         {
             poolSizes[i] = mPoolSizes[i];
-            poolSizes[i].descriptorCount *= newCapacity;
+            poolSizes[i].descriptorCount *= (uint32)newCapacity;
         }
 
         // We do not set FREE_DESCRIPTOR_SET_BIT as we do not need to free individual descriptor sets
@@ -133,7 +133,7 @@ namespace Ogre
 
         // Create the Vulkan descriptor pool
         VkResult result = vkCreateDescriptorPool( device->mDevice, &poolCi, 0, &pool.pool );
-        checkVkResult( result, "vkCreateDescriptorPool" );
+        checkVkResult( device, result, "vkCreateDescriptorPool" );
 
         mPools.push_back( pool );
         mCurrentPoolIdx = mPools.size() - 1u;
@@ -191,7 +191,8 @@ namespace Ogre
 
         while( itor != endt )
         {
-            vkResetDescriptorPool( device->mDevice, itor->pool, 0 );
+            VkResult result = vkResetDescriptorPool( device->mDevice, itor->pool, 0 );
+            checkVkResult( device, result, "vkResetDescriptorPool" );
             itor->size = 0u;
             ++itor;
         }

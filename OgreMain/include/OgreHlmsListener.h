@@ -29,6 +29,7 @@ THE SOFTWARE.
 #define _OgreHlmsListener_H_
 
 #include "OgreHlmsCommon.h"
+
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre
@@ -37,11 +38,11 @@ namespace Ogre
     struct QueuedRenderable;
 
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Resources
-    *  @{
-    */
+     *  @{
+     */
 
     /** Listener that can be hooked to an Hlms implementation for extending it with custom
         code. See "8.6.5 Customizing an existing implementation" of the 2.x manual
@@ -62,12 +63,14 @@ namespace Ogre
             generated yet) and the properties are before they are transformed by the templates
         @brief propertiesMergedPreGenerationStep
         @param hlms
+            @parblock
             Pointer to caller.
             WARNING: Note that any modified property WON'T BE CACHED. If you set a property based
             on external information, it will break caches.
 
             You can only set new properties that are derived from existing properties e.g. c = a + b,
             which means caching a and b will always result in c being the same value
+            @endparblock
         @param passCache
             Properties used by this pass
         @param renderableCacheProperties
@@ -78,24 +81,26 @@ namespace Ogre
         @param properties
             Combined properties of both renderableCacheProperties & passCache.setProperties
         @param queuedRenderable
+        @param tid
+            Thread Idx
         */
         virtual void propertiesMergedPreGenerationStep(
-                Hlms *hlms,
-                const HlmsCache &passCache,
-                const HlmsPropertyVec &renderableCacheProperties,
-                const PiecesMap renderableCachePieces[NumShaderTypes],
-                const HlmsPropertyVec &properties,
-                const QueuedRenderable &queuedRenderable ) {}
+            Hlms *hlms, const HlmsCache &passCache, const HlmsPropertyVec &renderableCacheProperties,
+            const PiecesMap renderableCachePieces[NumShaderTypes], const HlmsPropertyVec &properties,
+            const QueuedRenderable &queuedRenderable, size_t tid )
+        {
+        }
 
         /** If hlmsTypeChanged is going to be binding extra textures, override this function
             to tell us how many textures you will use, so that we don't use those slots
 
+            May be called from any thread.
         @remarks
             Given the same set of properties, the function must always return the same
             value. Otherwise caching (i.e. HlmsDiskCache) won't work correctly
         */
         virtual uint16 getNumExtraPassTextures( const HlmsPropertyVec &properties,
-                                                bool casterPass ) const
+                                                bool                   casterPass ) const
         {
             return 0u;
         }
@@ -112,66 +117,122 @@ namespace Ogre
             An already-filled rootLayout derived classes can modify
         @param properties
             The current contents of Hlms::mSetProperties
+        @param tid
+            Thread Idx
         */
-        virtual void setupRootLayout( RootLayout &rootLayout, const HlmsPropertyVec &properties ) const
+        virtual void setupRootLayout( RootLayout &rootLayout, const HlmsPropertyVec &properties,
+                                      size_t tid ) const
         {
         }
 
         /** Called after the shader was created/compiled, and right before
             bindGpuProgramParameters (relevant information for OpenGL programs).
         @param shaderProfile
-            @see Hlms::mShaderProfile
+            See Hlms::mShaderProfile
         @param hlmsCacheEntry
             The created shader.
         @param passCache
-            @see Hlms::createShaderCacheEntry
+            See Hlms::createShaderCacheEntry
         @param properties
             The current contents of Hlms::mSetProperties
         @param queuedRenderable
-            @see Hlms::createShaderCacheEntry
+            See Hlms::createShaderCacheEntry
+        @param tid
+            Thread Idx
         */
-        virtual void shaderCacheEntryCreated( const String &shaderProfile,
-                                              const HlmsCache *hlmsCacheEntry,
-                                              const HlmsCache &passCache,
-                                              const HlmsPropertyVec &properties,
-                                              const QueuedRenderable &queuedRenderable ) {}
+        virtual void shaderCacheEntryCreated( const String           &shaderProfile,
+                                              const HlmsCache        *hlmsCacheEntry,
+                                              const HlmsCache        &passCache,
+                                              const HlmsPropertyVec  &properties,
+                                              const QueuedRenderable &queuedRenderable, size_t tid )
+        {
+        }
 
         /** Called right before creating the pass cache, to allow the listener
             to add/remove properties.
         @remarks
             For the rest of the parameters, @see Hlms::preparePassHash
+
+            The Thread Idx is always Hlms::kNoTid
         @param hlms
             Caller Hlms; from which you can alter the properties using Hlms::setProperty
         */
-        virtual void preparePassHash( const CompositorShadowNode *shadowNode,
-                                      bool casterPass, bool dualParaboloid,
-                                      SceneManager *sceneManager, Hlms *hlms ) {}
+        virtual void preparePassHash( const CompositorShadowNode *shadowNode, bool casterPass,
+                                      bool dualParaboloid, SceneManager *sceneManager, Hlms *hlms )
+        {
+        }
 
-        /// Listeners should return the extra bytes they wish to allocate for storing additional
-        /// data in the pass buffer. Return value must be in bytes.
+        /** Listeners should return the number of extra bytes they wish to allocate for storing
+            additional data in the pass buffer.
+
+            The actual data will be provided by a preparePassBuffer() override.
+
+            The Thread Idx is always Hlms::kNoTid
+        @return
+            Number of bytes of additional pass buffer data to allocate.  Must be a multiple of 16.
+        */
         virtual uint32 getPassBufferSize( const CompositorShadowNode *shadowNode, bool casterPass,
                                           bool dualParaboloid, SceneManager *sceneManager ) const
-                                                                    { return 0; }
+        {
+            return 0;
+        }
 
-        /// Users can write to passBufferPtr. Implementations must ensure they make the buffer
-        /// big enough via getPassBufferSize.
-        /// The passBufferPtr is already aligned to 16 bytes.
-        /// Implementations must return the pointer past the end, aligned to 16 bytes.
-        virtual float* preparePassBuffer( const CompositorShadowNode *shadowNode, bool casterPass,
+        /** Write additional data in the pass buffer.
+
+            Users can write to passBufferPtr. Implementations must ensure they make the buffer
+            big enough via getPassBufferSize(). The passBufferPtr is already aligned to 16 bytes.
+
+            The Thread Idx is always Hlms::kNoTid
+        @return
+            Pointer past the end of added data, aligned to 16 bytes.  The difference between
+            the result pointer and the input passBufferPtr must equal the value that you returned from
+            getPassBufferSize().
+        */
+        virtual float *preparePassBuffer( const CompositorShadowNode *shadowNode, bool casterPass,
                                           bool dualParaboloid, SceneManager *sceneManager,
-                                          float *passBufferPtr )    { return passBufferPtr; }
+                                          float *passBufferPtr )
+        {
+            return passBufferPtr;
+        }
 
         /// Called when the last Renderable processed was of a different Hlms type, thus we
         /// need to rebind certain buffers (like the pass buffer). You can use
         /// this moment to bind your own buffers.
+        ///
+        /// The Thread Idx is always Hlms::kNoTid
         virtual void hlmsTypeChanged( bool casterPass, CommandBuffer *commandBuffer,
-                                      const HlmsDatablock *datablock, size_t texUnit ) {}
+                                      const HlmsDatablock *datablock, size_t texUnit )
+        {
+        }
+
+        /** Called from Hlms::createShaderCacheEntry after an HlmsPso is initialized. It allows to modify
+            its currently assigned macroblock. This allows to override the macroblocks for all
+            renderables within a pass. The listener can set a property or multiple properties in
+            preparePassHash which can be accessed from this method to modify input macroblock.
+            @see Hlms::applyStrongMacroblockRules.
+        @remarks
+            Given the same set of properties, the function must always return the same
+            value. Otherwise caching (i.e. HlmsDiskCache) won't work correctly.
+        @param macroblock [in/out]
+            Current macroblock. You can modify it if needed.
+        @param properties
+        */
+        virtual void applyStrongMacroblockRules( HlmsMacroblock        &macroblock,
+                                                 const HlmsPropertyVec &properties ) const
+        {
+        }
+
+        /// @copydoc HlmsListener::applyStrongMacroblockRules()
+        virtual void applyStrongBlendblockRules( HlmsBlendblock        &blendblock,
+                                                 const HlmsPropertyVec &properties ) const
+        {
+        }
     };
 
     /** @} */
     /** @} */
 
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

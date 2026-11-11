@@ -44,7 +44,7 @@ typedef uint32_t xcb_atom_t;
 
 namespace Ogre
 {
-    class _OgreVulkanExport VulkanXcbWindow : public VulkanWindow
+    class _OgreVulkanExport VulkanXcbWindow : public VulkanWindowSwapChainBased
     {
         xcb_connection_t *mConnection;
         xcb_screen_t *mScreen;
@@ -64,6 +64,7 @@ namespace Ogre
 
         void createWindow( const String &windowName, uint32 width, uint32 height,
                            const NameValuePairList *miscParams );
+        void createSurface() override;
 
     public:
         void switchMode( uint32 width, uint32 height, uint32 frequencyNum, uint32 frequencyDen );

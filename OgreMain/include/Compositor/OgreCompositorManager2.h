@@ -33,11 +33,11 @@ THE SOFTWARE.
 
 #include "OgreCompositorCommon.h"
 
+#include "Compositor/OgreCompositorChannel.h"
 #include "OgreIdString.h"
+#include "OgrePixelFormatGpu.h"
 #include "OgreResourceTransition.h"
 #include "OgreVector4.h"
-#include "OgrePixelFormatGpu.h"
-#include "Compositor/OgreCompositorChannel.h"
 
 #include "ogrestd/map.h"
 
@@ -51,15 +51,15 @@ namespace Ogre
     }
     class CompositorPassProvider;
 
-    typedef vector<TextureGpu*>::type TextureGpuVec;
-    typedef vector<UavBufferPacked*>::type UavBufferPackedVec;
+    typedef vector<TextureGpu *>::type      TextureGpuVec;
+    typedef vector<UavBufferPacked *>::type UavBufferPackedVec;
 
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Scene
-    *  @{
-    */
+     *  @{
+     */
 
     /** Main system for managing Render Targets through the use of nodes. All applications
         must at least define a workspace definition and create a workspace instance in order
@@ -68,15 +68,16 @@ namespace Ogre
         The CompositorManager2 works by defining definitions which tell how the instance will
         behave.
         The top down view is the following:
-            * Workspace
-                * Node
-                    * Target
-                        * PASS_SCENE
-                        * PASS_QUAD
-                        * PASS_CLEAR 
-                        * PASS_STENCIL
-                        * PASS_RESOLVE
-                * Shadow Node
+            + Workspace
+                + Node
+                    + Target
+                        + PASS_SCENE
+                        + PASS_QUAD
+                        + PASS_CLEAR
+                        + PASS_STENCIL
+                        + PASS_RESOLVE
+                + Shadow Node
+
         A Node definition must be created first. Inside the Node Def. different passes can be defined
         including which targets they should render to.
         Once the definitions are set, a workspace instance must be created using addWorkspace
@@ -90,12 +91,12 @@ namespace Ogre
     @par
         A node has inputs (textures), local textures, and outputs. It can also directly global textures
         that are defined in a workspace definition. There a few basic rules:
-            * Global Textures use the "global_" prefix. For example "global_myRT" is a global texture.
+            + Global Textures use the "global_" prefix. For example "global_myRT" is a global texture.
               Trying to create a Local texture with that name will throw.
-            * Global Textures can't be used as node input nor output.
-            * Textures that came as Input can be used as Output.
-            * A node may have no Input nor Output.
-            * Shadow Nodes can't have input, but can have output to be used with other nodes.
+            + Global Textures can't be used as node input nor output.
+            + Textures that came as Input can be used as Output.
+            + A node may have no Input nor Output.
+            + Shadow Nodes can't have input, but can have output to be used with other nodes.
     @par
         Shadow Nodes are particular case of Nodes which are used for rendering shadow maps, and can
         only be references from a PASS_SCENE object; and will be executed when that pass is.
@@ -103,56 +104,59 @@ namespace Ogre
         postprocessing), which enables the possibility of easily creating RSM (Reflective Shadow
         Maps) for Global Illumination calculations.
     @par
-        For more information @see CompositorNode & @see CompositorShadowNode
+        For more information @see CompositorNode @see CompositorShadowNode
     */
-    class _OgreExport CompositorManager2 : public ResourceAlloc
+    class _OgreExport CompositorManager2 : public OgreAllocatedObj
     {
     public:
-        typedef map<IdString, CompositorNodeDef*>::type         CompositorNodeDefMap;
+        typedef map<IdString, CompositorNodeDef *>::type CompositorNodeDefMap;
 
     protected:
         struct QueuedWorkspace
         {
             CompositorWorkspace *workspace;
-            int position;
+            int                  position;
             QueuedWorkspace( CompositorWorkspace *_workspace, int _position ) :
-                workspace( _workspace ), position( _position ) {}
+                workspace( _workspace ),
+                position( _position )
+            {
+            }
         };
 
-        CompositorNodeDefMap    mNodeDefinitions;
+        CompositorNodeDefMap mNodeDefinitions;
 
-        typedef map<IdString, CompositorShadowNodeDef*>::type   CompositorShadowNodeDefMap;
-        typedef vector<CompositorShadowNodeDef*>::type          CompositorShadowNodeDefVec;
-        CompositorShadowNodeDefMap mShadowNodeDefs;
-        CompositorShadowNodeDefVec mUnfinishedShadowNodes;
+        typedef map<IdString, CompositorShadowNodeDef *>::type CompositorShadowNodeDefMap;
+        typedef vector<CompositorShadowNodeDef *>::type        CompositorShadowNodeDefVec;
+        CompositorShadowNodeDefMap                             mShadowNodeDefs;
+        CompositorShadowNodeDefVec                             mUnfinishedShadowNodes;
 
-        typedef map<IdString, CompositorWorkspaceDef*>::type    CompositorWorkspaceDefMap;
-        CompositorWorkspaceDefMap mWorkspaceDefs;
+        typedef map<IdString, CompositorWorkspaceDef *>::type CompositorWorkspaceDefMap;
+        CompositorWorkspaceDefMap                             mWorkspaceDefs;
 
-        typedef vector<CompositorWorkspace*>::type              WorkspaceVec;
-        typedef vector<QueuedWorkspace>::type                   QueuedWorkspaceVec;
-        WorkspaceVec            mWorkspaces;
+        typedef vector<CompositorWorkspace *>::type WorkspaceVec;
+        typedef vector<QueuedWorkspace>::type       QueuedWorkspaceVec;
+        WorkspaceVec                                mWorkspaces;
         /// All workspaces created via addWorkspace are first stored in this
         /// container, to prevent corrupting mWorkspaces' iterators in
         /// case we happen to be adding a workspace while inside the
         /// workspace's update loop (i.e. in a listener)
-        QueuedWorkspaceVec      mQueuedWorkspaces;
+        QueuedWorkspaceVec mQueuedWorkspaces;
         /// Listeners to call CompositorWorkspaceListener::allWorkspacesBeginUpdate
         CompositorWorkspaceListenerVec mListeners;
 
-        size_t                  mFrameCount;
+        size_t mFrameCount;
 
-        RenderSystem            *mRenderSystem;
+        RenderSystem *mRenderSystem;
 
-        TextureGpuVec           mNullTextureList;
-        v1::Rectangle2D         *mSharedTriangleFS;
-        v1::Rectangle2D         *mSharedQuadFS;
-        ObjectMemoryManager     *mDummyObjectMemoryManager;
+        TextureGpuVec        mNullTextureList;
+        v1::Rectangle2D     *mSharedTriangleFS;
+        v1::Rectangle2D     *mSharedQuadFS;
+        ObjectMemoryManager *mDummyObjectMemoryManager;
 
         /// For custom passes.
-        CompositorPassProvider  *mCompositorPassProvider;
+        CompositorPassProvider *mCompositorPassProvider;
 
-        BarrierSolver &mBarrierSolver;
+        BarrierSolver          &mBarrierSolver;
         ResourceTransitionArray mFinalResourceTransition;
 
         bool mRenderWindowsPresentBarrierDirty;
@@ -168,28 +172,23 @@ namespace Ogre
         void _releaseManualHardwareResources();
         void _restoreManualHardwareResources();
 
-        /** The final rendering is done by passing the RenderWindow to one of the input
-            channels. This functions does exactly that.
-        */
-        void connectOutput( CompositorNode *finalNode, size_t inputChannel );
-
         /// Returns true if a node definition with the given name exists
         bool hasNodeDefinition( IdString nodeDefName ) const;
 
         /// Returns the node definition with the given name. Throws if not found
-        const CompositorNodeDef* getNodeDefinition( IdString nodeDefName ) const;
+        const CompositorNodeDef *getNodeDefinition( IdString nodeDefName ) const;
 
-        /// @See getNodeDefinition. Returns a non-const pointer. Use this only if you
+        /// See getNodeDefinition(). Returns a non-const pointer. Use this only if you
         /// know what you're doing. Modifying a NodeDef while it's being used by
         /// CompositorNode instances is undefined. It's safe if you're sure it's not
         /// being used.
-        CompositorNodeDef* getNodeDefinitionNonConst( IdString nodeDefName ) const;
+        CompositorNodeDef *getNodeDefinitionNonConst( IdString nodeDefName ) const;
 
         /// Returns a const iterator to all existing definitions
-        const CompositorNodeDefMap& getNodeDefinitions() const  { return mNodeDefinitions; }
+        const CompositorNodeDefMap &getNodeDefinitions() const { return mNodeDefinitions; }
 
         /// Returns a new node definition. The name must be unique, throws otherwise.
-        CompositorNodeDef* addNodeDefinition( const String &name );
+        CompositorNodeDef *addNodeDefinition( const String &name );
 
         /// Removes the node definition with the given name. Throws if not found
         void removeNodeDefinition( IdString nodeDefName );
@@ -198,16 +197,16 @@ namespace Ogre
         bool hasShadowNodeDefinition( IdString nodeDefName ) const;
 
         /// Returns the node definition with the given name. Throws if not found
-        const CompositorShadowNodeDef* getShadowNodeDefinition( IdString nodeDefName ) const;
+        const CompositorShadowNodeDef *getShadowNodeDefinition( IdString nodeDefName ) const;
 
-        /// @See getShadowNodeDefinition. Returns a non-const pointer. Use this only if you
+        /// See getShadowNodeDefinition(). Returns a non-const pointer. Use this only if you
         /// know what you're doing. Modifying a ShadowNodeDef while it's being used by
         /// CompositorShadowNode instances is undefined. It's safe if you're sure it's not
         /// being used.
-        CompositorShadowNodeDef* getShadowNodeDefinitionNonConst( IdString nodeDefName ) const;
+        CompositorShadowNodeDef *getShadowNodeDefinitionNonConst( IdString nodeDefName ) const;
 
         /// Returns a new node definition. The name must be unique, throws otherwise.
-        CompositorShadowNodeDef* addShadowNodeDefinition( const String &name );
+        CompositorShadowNodeDef *addShadowNodeDefinition( const String &name );
 
         /// Removes the node definition with the given name. Throws if not found
         void removeShadowNodeDefinition( IdString nodeDefName );
@@ -216,34 +215,34 @@ namespace Ogre
         bool hasWorkspaceDefinition( IdString name ) const;
 
         /// Returns the workspace definition with the given name. Throws if not found
-        CompositorWorkspaceDef* getWorkspaceDefinition( IdString name ) const;
-        CompositorWorkspaceDef* getWorkspaceDefinitionNoThrow( IdString name ) const;
+        CompositorWorkspaceDef *getWorkspaceDefinition( IdString name ) const;
+        CompositorWorkspaceDef *getWorkspaceDefinitionNoThrow( IdString name ) const;
 
         /** Returns a new workspace definition. The name must be unique, throws otherwise.
         @remarks
             Setting workspace def's connections must be done *after* all node
             definitions have been created
         */
-        CompositorWorkspaceDef* addWorkspaceDefinition( const String& name );
+        CompositorWorkspaceDef *addWorkspaceDefinition( const String &name );
 
         /// Removes the workspace definition with the given name. Throws if not found
         void removeWorkspaceDefinition( IdString name );
 
         /// Returns how many times _update has been called.
-        size_t getFrameCount() const                    { return mFrameCount; }
+        size_t getFrameCount() const { return mFrameCount; }
 
-        /** Get an appropriately defined 'null' texture, i.e. one which will always
+        /** Get an appropriately defined 'null' texture, i.e., one which will always
             result in no shadows.
         */
-        TextureGpu* getNullShadowTexture( PixelFormatGpu format );
+        TextureGpu *getNullShadowTexture( PixelFormatGpu format );
 
         /** Returns a shared fullscreen rectangle/triangle useful for PASS_QUAD passes
         @remarks
             Pointer is valid throughout the lifetime of this CompositorManager2
         */
-        v1::Rectangle2D* getSharedFullscreenTriangle() const    { return mSharedTriangleFS; }
+        v1::Rectangle2D *getSharedFullscreenTriangle() const { return mSharedTriangleFS; }
         /// @copydoc getSharedFullscreenTriangle
-        v1::Rectangle2D* getSharedFullscreenQuad() const        { return mSharedQuadFS; }
+        v1::Rectangle2D *getSharedFullscreenQuad() const { return mSharedQuadFS; }
 
         /** Main function to start rendering. Creates a workspace instance based on a
             workspace definition.
@@ -254,21 +253,24 @@ namespace Ogre
             a portion of the screen while using two (or more) workspaces without
             having to duplicate the nodes just to alter their viewport parameters.
 
+        @par
             viewportModifier controls how to stretch the viewport in each pass,
             vpModifierMask controls which passes will ignore the stretching, and
             executionMask controls which passes get skipped.
 
+        @par
             All passes have a default executionMask = 0xFF vpModifierMask = 0xFF
             except for clear passes which default to
             executionMask = 0x01 vpModifierMask = 0x00
 
+        @par
             The reasoning behind this is that often you want to clear the whole renderTarget
             the first time (it's GPU-friendly to discard the entire buffer; aka
             vpModifierMask = 0), but the second time you don't want the clear to be executed
             at all to prevent overwritting the contents from the first pass (executionMask = 1).
         @par
-
             Example, stereo (split screen):
+        @code
             //Render Eye0 to the left side of the screen
             m_workspaceEye0 = mgr->addWorkspace( sceneManager, renderTarget,
                                                  eyeCamera0, "MainWorkspace", true,
@@ -279,9 +281,11 @@ namespace Ogre
                                                  eyeCamera1, "MainWorkspace", true,
                                                  -1, Vector4( 0.5f, 0, 0.5f, 1 ),
                                                  0x02, 0x02 );
-        @par
+        @endcode
 
-            Example, split screen, multiplayer, 4 players (e.g. Mario Kart (R)-like games)
+        @par
+           Example, split screen, multiplayer, 4 players (e.g. Mario Kart (R)-like games)
+        @code
             for( int i=0; i<4; ++i )
             {
                 Vector4 vpModifier( (i % 2) * 0.5f, (i >> 1) * 0.5f, 0.25f, 0.25f );
@@ -290,6 +294,7 @@ namespace Ogre
                                                     -1, vpModifier,
                                                     (1 << i), (1 << i) );
             }
+        @endcode
 
         @param sceneManager
             The SceneManager this workspace will be associated with. You can have multiple
@@ -299,10 +304,10 @@ namespace Ogre
             The final RT where the workspace will be rendered to. Usually the RenderWindow.
             We need this pointer in order to correctly create RTTs that depend on
             the final target's width, height, gamma & fsaa settings.
-            This pointer will be used for "connectOutput" channels
-            (@see CompositorWorkspaceDef::connectOutput)
+            This pointer will be used for "connectExternal" channels
+            (see CompositorWorkspaceDef::connectExternal)
             In theory if none of your nodes use width & height relative to final RT &
-            you don't use connectOutput, this pointer could be null. Although it's not
+            you don't use connectExternal, this pointer could be null. Although it's not
             recommended nor explicitly supported.
         @param defaultCam
             Default camera to use when a camera name wasn't specified explicitly in a
@@ -334,65 +339,69 @@ namespace Ogre
                 height  *= vpOffsetScale.w;
             This affects both the viewport dimensions as well as the scissor rect.
         @param vpModifierMask
+        @parblock
             An 8-bit mask that will be AND'ed with the viewport modifier mask of each pass
             from every node. When the result is zero, the previous parameter "viewportModifier"
             isn't applied to that pass.
 
             This is useful when you want to apply a pass (like Clear) to the whole render
             target and not just to the scaled region.
+        @endparblock
         @param executionMask
+        @parblock
             An 8-bit mask that will be AND'ed with the execution mask of each pass from
             every node. When the result is zero, the pass isn't executed. See remarks
             on how to use this for efficient Stereo or split screen.
 
             This is useful when you want to skip a pass (like Clear) when rendering the second
             eye (or the second split from the second player).
+        @endparblock
         */
         CompositorWorkspace *addWorkspace( SceneManager *sceneManager, TextureGpu *finalRenderTarget,
                                            Camera *defaultCam, IdString definitionName, bool bEnabled,
                                            int position = -1, const UavBufferPackedVec *uavBuffers = 0,
                                            const ResourceStatusMap *initialLayouts = 0,
-                                           const Vector4 &vpOffsetScale = Vector4::ZERO,
+                                           const Vector4           &vpOffsetScale = Vector4::ZERO,
                                            uint8 vpModifierMask = 0x00, uint8 executionMask = 0xFF );
 
         /// Overload that allows having multiple external input/outputs
-        CompositorWorkspace *addWorkspace( SceneManager *sceneManager,
+        CompositorWorkspace *addWorkspace( SceneManager               *sceneManager,
                                            const CompositorChannelVec &externalRenderTargets,
                                            Camera *defaultCam, IdString definitionName, bool bEnabled,
                                            int position = -1, const UavBufferPackedVec *uavBuffers = 0,
                                            const ResourceStatusMap *initialLayouts = 0,
-                                           const Vector4 &vpOffsetScale = Vector4::ZERO,
+                                           const Vector4           &vpOffsetScale = Vector4::ZERO,
                                            uint8 vpModifierMask = 0x00, uint8 executionMask = 0xFF );
 
         /// Removes the given workspace. Pointer is no longer valid after this call
         void removeWorkspace( CompositorWorkspace *workspace );
 
-        /// Removes all workspaces. Make sure you don't hold any reference to a CompositorWorkpace!
+        /// Removes all workspaces. Make sure you don't hold any reference to a CompositorWorkspace !
         void removeAllWorkspaces();
         void removeAllWorkspaceDefinitions();
 
-        size_t getNumWorkspaces() const                         { return mWorkspaces.size(); }
+        size_t getNumWorkspaces() const { return mWorkspaces.size(); }
 
         /** Removes all shadow nodes defs. Make sure there are no active nodes using the definition!
         @remarks
-            Call removeAllWorkspaceDefinitions first
+            Call removeAllWorkspaceDefinitions() first
         */
         void removeAllShadowNodeDefinitions();
 
         /** Removes all node defs. Make sure there are no active nodes using the definition!
         @remarks
-            Call removeAllWorkspaceDefinitions first
+            Call removeAllWorkspaceDefinitions() first
         */
         void removeAllNodeDefinitions();
 
-        /// Calls @see CompositorNode::_validateAndFinish on all objects who aren't yet validated
+        /// Calls CompositorShadowNodeDef::_validateAndFinish on all objects who aren't yet validated
         void validateAllNodes();
 
         BarrierSolver &getBarrierSolver() { return mBarrierSolver; }
 
-        /// Will call the renderSystem which in turns calls _updateImplementation
+        /// Will call the renderSystem which in turns calls _updateImplementation()
         void _update();
-        
+
         /// This should be called by the render system to
         /// perform the actual compositor manager update.
         /// DO NOT CALL THIS DIRECTLY.
@@ -411,26 +420,26 @@ namespace Ogre
             Name of the shadow node. Leave blank if no shadows.
             Caller is supposed to have set the shadow node correctly
         */
-        void createBasicWorkspaceDef( const String &workspaceDefName,
-                                        const ColourValue &backgroundColour,
-                                        IdString shadowNodeName=IdString() );
+        void createBasicWorkspaceDef( const String      &workspaceDefName,
+                                      const ColourValue &backgroundColour,
+                                      IdString           shadowNodeName = IdString() );
 
         /// Sets a custom pass provider in order to implement custom passes in
         /// your nodes. @see CompositorPassProvider
-        void setCompositorPassProvider( CompositorPassProvider *passProvider );
-        CompositorPassProvider* getCompositorPassProvider() const;
+        void                    setCompositorPassProvider( CompositorPassProvider *passProvider );
+        CompositorPassProvider *getCompositorPassProvider() const;
 
         void addListener( CompositorWorkspaceListener *listener );
         void removeListener( CompositorWorkspaceListener *listener );
 
         void _notifyBarriersDirty();
 
-        RenderSystem* getRenderSystem() const;
+        RenderSystem *getRenderSystem() const;
     };
 
     /** @} */
     /** @} */
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

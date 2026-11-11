@@ -14,7 +14,7 @@
 # and provide build configuration options.
 ######################################################################
 
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.13)
 set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS TRUE)
 cmake_policy(SET CMP0003 NEW)
 
@@ -22,11 +22,8 @@ if(CMAKE_VS_PLATFORM_NAME STREQUAL "Tegra-Android")
 	set(CMAKE_LINK_LIBRARY_FLAG "")
 endif()
 
-# CMake 2.8.2 has a bug that creates unusable Xcode projects when using ARCHS_STANDARD_32_BIT
-# to specify both armv6 and armv7.
-if(OGRE_BUILD_PLATFORM_APPLE_IOS AND (CMAKE_VERSION VERSION_EQUAL 2.8.2) AND (CMAKE_GENERATOR STREQUAL "Xcode"))
-	message(FATAL_ERROR "CMake 2.8.2 cannot create compatible Xcode projects for iOS, please download the latest version or an older release from http://www.cmake.org/files/")
-endif()
+#fix Policy CMP0072 is not set
+set(OpenGL_GL_PREFERENCE LEGACY)
 
 # Use relative paths
 # This is mostly to reduce path size for command-line limits on windows
@@ -37,28 +34,45 @@ if(WIN32)
 endif()
 
 if (APPLE AND NOT ANDROID)
-  if(CMAKE_VERSION VERSION_LESS 3.0.0)
-    include(CMakeForceCompiler)
-    CMAKE_FORCE_C_COMPILER(clang GNU)
-    CMAKE_FORCE_CXX_COMPILER(clang++ GNU)
-  endif()
   SET(CMAKE_SIZEOF_VOID_P 4)
   set(CMAKE_XCODE_ATTRIBUTE_GCC_VERSION "com.apple.compilers.llvm.clang.1_0")
   set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++11")
   set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
+  set(CMAKE_XCODE_ATTRIBUTE_USE_HEADERMAP NO)
+
+  # Minimum macOS deployment target. iOS uses IPHONEOS_DEPLOYMENT_TARGET instead
+  # (see CMake/Utils/OgreConfigTargets.cmake).
+  if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT APPLE_IOS AND NOT OGRE_BUILD_PLATFORM_APPLE_IOS)
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+      set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
+    endif()
+  endif()
 endif ()
 
+# This option needs to be set now
+# OgreAddTargets and OgreConfigTargets make use of OGRE_NEXT and OGRE_NEXT_PREFIX
+option(OGRE_USE_NEW_PROJECT_NAME
+	"Libraries containing Ogre name will be called OgreNext, e.g. 'OgreNext.dll' instead of 'Ogre.dll'"
+	TRUE)
+
+if( OGRE_USE_NEW_PROJECT_NAME )
+	set( OGRE_NEXT "OgreNext" )
+	set( OGRE_NEXT_PREFIX "OGRE-Next")
+else()
+	set( OGRE_NEXT "Ogre" )
+	set( OGRE_NEXT_PREFIX "OGRE" )
+endif()
 
 project(OGRE-Next)
-# legacy variables from the old name OGRE
-set(OGRE_SOURCE_DIR ${CMAKE_SOURCE_DIR})
-set(OGRE_BINARY_DIR ${CMAKE_BINARY_DIR})
+# capture ogre location, and at the same time hide legacy cache variables
+set(OGRE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(OGRE_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 # Include necessary submodules
 set(CMAKE_MODULE_PATH
-  "${CMAKE_SOURCE_DIR}/CMake"
-  "${CMAKE_SOURCE_DIR}/CMake/Utils"
-  "${CMAKE_SOURCE_DIR}/CMake/Packages"
+  "${OGRE_SOURCE_DIR}/CMake"
+  "${OGRE_SOURCE_DIR}/CMake/Utils"
+  "${OGRE_SOURCE_DIR}/CMake/Packages"
 )
 
 if(ANDROID)
@@ -71,7 +85,7 @@ include(MacroLogFeature)
 include(OgreAddTargets)
 include(OgreConfigTargets)
 include(PreprocessorUtils)
-set(OGRE_TEMPLATES_DIR "${CMAKE_SOURCE_DIR}/CMake/Templates")
+set(OGRE_TEMPLATES_DIR "${OGRE_SOURCE_DIR}/CMake/Templates")
 set(OGRE_WORK_DIR ${OGRE_BINARY_DIR})
 
 
@@ -87,7 +101,7 @@ endif ()
 
 # determine Ogre version numbers
 include(OgreGetVersion)
-ogre_get_version(${CMAKE_SOURCE_DIR}/OgreMain/include/OgrePrerequisites.h)
+ogre_get_version(${OGRE_SOURCE_DIR}/OgreMain/include/OgrePrerequisites.h)
 message(STATUS "Configuring OGRE ${OGRE_VERSION}")
 # Configure version file for use by scripts
 configure_file("${OGRE_TEMPLATES_DIR}/version.txt.in" "${OGRE_BINARY_DIR}/version.txt" @ONLY)
@@ -116,15 +130,35 @@ if (CMAKE_COMPILER_IS_GNUCXX OR CMAKE_COMPILER_IS_CLANGXX)
     set(OGRE_GCC_HAS_SSE FALSE)
   else()
     check_cxx_compiler_flag(-msse OGRE_GCC_HAS_SSE)
+
+    if( UNIX AND (EXISTS /usr/bin/ld.lld OR EXISTS /usr/local/bin/ld.lld) )
+      message( STATUS "Using lld linker" )
+      set( CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld" )
+    else()
+      message( "BUILD PERFORMANCE - lld linker not found. Consider installing it for much faster link times" )
+    endif()
   endif()
   if (OGRE_GCC_HAS_SSE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2")
+    if(CMAKE_GENERATOR STREQUAL "Xcode")
+      # XCode builds universal binaries, and generates too much warnings when -msse and -msse2 are passed to arm compiler
+      set(CMAKE_XCODE_ATTRIBUTE_ARCH_CXXFLAGS[arch=i386] "-msse -msse2")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} $(ARCH_CXXFLAGS)")
+    else()
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2")
+    endif ()
   endif ()
   # This is a set of sensible warnings that provide meaningful output
-  set(OGRE_WARNING_FLAGS "-Wall -Winit-self -Wno-overloaded-virtual -Wcast-qual -Wwrite-strings -Wextra -Wno-unused-parameter -Wshadow -Wno-missing-field-initializers -Wno-long-long")
+  set(OGRE_WARNING_FLAGS
+      "-Wall -Winit-self -Wcast-qual -Wwrite-strings -Wextra -Wno-unused-parameter -Wshadow -Wimplicit-fallthrough")
 
   if( CMAKE_COMPILER_IS_GNUCXX )
+    # On GCC:
+    # - Wsign-conversion has too many false positives. See https://stackoverflow.com/a/64542771
+    # - Wconversion is too dumb. Too many false positives.
     set( OGRE_WARNING_FLAGS "${OGRE_WARNING_FLAGS} -Wsuggest-override" )
+  else()
+    set( OGRE_WARNING_FLAGS "${OGRE_WARNING_FLAGS} \
+        -Winconsistent-missing-destructor-override -Wcomma -Wsign-conversion -Wconversion" )
   endif()
 
   if (EMSCRIPTEN)
@@ -145,7 +179,7 @@ if (MSVC)
 	# set variable to state that we are using jom makefiles
 	set(JOM TRUE)
   endif ()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fp:fast")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fp:fast /Zc:__cplusplus")
   if (NOT OGRE_PLATFORM_X64)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:SSE2")
   endif()
@@ -163,19 +197,12 @@ if (MSVC)
     # object files can get large with Unity builds
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
   endif ()
-  if (MSVC_VERSION GREATER 1500 OR MSVC_VERSION EQUAL 1500)
-    option(OGRE_BUILD_MSVC_MP "Enable build with multiple processes in Visual Studio" TRUE)
-  else()
-    set(OGRE_BUILD_MSVC_MP FALSE CACHE BOOL "Compiler option /MP requires at least Visual Studio 2008 (VS9) or newer" FORCE)
-  endif()
+  option(OGRE_BUILD_MSVC_MP "Enable build with multiple processes in Visual Studio" TRUE)
   if(OGRE_BUILD_MSVC_MP)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
   endif ()
-  if(MSVC_VERSION GREATER 1400 OR MSVC_VERSION EQUAL 1400)
-    option(OGRE_BUILD_MSVC_ZM "Add /Zm256 compiler option to Visual Studio to fix PCH errors" TRUE)
-  else()
-    set(OGRE_BUILD_MSVC_ZM FALSE CACHE BOOL "Compiler option /Zm256 requires at least Visual Studio 2005 (VS8) or newer" FORCE)
-  endif()
+  option(OGRE_BUILD_MSVC_ZM "Add /Zm256 compiler option to Visual Studio to fix PCH errors" TRUE)
+
   if(OGRE_BUILD_MSVC_ZM)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zm256")
   endif ()
@@ -205,7 +232,7 @@ if ((CMAKE_COMPILER_IS_GNUCXX OR CMAKE_COMPILER_IS_CLANGXX) AND NOT MINGW)
       OUTPUT_VARIABLE OGRE_GCC_VERSION)
     message(STATUS "Detected g++ ${OGRE_GCC_VERSION}")
     message(STATUS "Enabling GCC visibility flags")
-    set(OGRE_GCC_VISIBILITY_FLAGS "-DOGRE_GCC_VISIBILITY -fvisibility=hidden")
+    set(OGRE_GCC_VISIBILITY_FLAGS "-fvisibility=hidden")
     set(XCODE_ATTRIBUTE_GCC_SYMBOLS_PRIVATE_EXTERN "YES")
 
     # check if we can safely add -fvisibility-inlines-hidden
@@ -235,36 +262,40 @@ else()
 endif()
 
 # Add OgreMain include path
-include_directories("${CMAKE_SOURCE_DIR}/OgreMain/include")
+include_directories("${OGRE_SOURCE_DIR}/OgreMain/include")
 include_directories("${OGRE_BINARY_DIR}/include")
 if (APPLE)
   if (OGRE_BUILD_PLATFORM_APPLE_IOS)
-    include_directories("${CMAKE_SOURCE_DIR}/OgreMain/include/iOS")
+    include_directories("${OGRE_SOURCE_DIR}/OgreMain/include/iOS")
 
     # Set static early for proper dependency detection
     set(OGRE_STATIC TRUE)
   else ()
-    include_directories("${CMAKE_SOURCE_DIR}/OgreMain/include/OSX")
+    include_directories("${OGRE_SOURCE_DIR}/OgreMain/include/OSX")
   endif ()
 endif (APPLE)
 
 # Add platform-specific render system Metal include path
 if (APPLE AND OGRE_BUILD_RENDERSYSTEM_METAL)
   if (OGRE_BUILD_PLATFORM_APPLE_IOS)
-    include_directories("${CMAKE_SOURCE_DIR}/RenderSystems/Metal/include/Windowing/iOS")
+    include_directories("${OGRE_SOURCE_DIR}/RenderSystems/Metal/include/Windowing/iOS")
   else ()
-    include_directories("${CMAKE_SOURCE_DIR}/RenderSystems/Metal/include/Windowing/OSX")
+    include_directories("${OGRE_SOURCE_DIR}/RenderSystems/Metal/include/Windowing/OSX")
   endif ()
 endif (APPLE AND OGRE_BUILD_RENDERSYSTEM_METAL)
 
 # Find dependencies
 include(Dependencies)
 # definitions for samples
-set(OGRE_LIBRARIES OgreMain)
-set(OGRE_MeshLodGenerator_LIBRARIES OgreMeshLodGenerator)
-set(OGRE_Paging_LIBRARIES OgrePaging)
-set(OGRE_Terrain_LIBRARIES OgreTerrain)
-set(OGRE_Volume_LIBRARIES OgreVolume)
+set(OGRE_LIBRARIES ${OGRE_NEXT}Main)
+set(OGRE_MeshLodGenerator_LIBRARIES ${OGRE_NEXT}MeshLodGenerator)
+set(OGRE_Paging_LIBRARIES ${OGRE_NEXT}Paging)
+set(OGRE_Terrain_LIBRARIES ${OGRE_NEXT}Terrain)
+set(OGRE_Volume_LIBRARIES ${OGRE_NEXT}Volume)
+
+if( OGRE_STATIC AND UNIX AND NOT APPLE AND NOT OGRE_CONFIG_UNIX_NO_X11 )
+	set( OGRE_LIBRARIES ${OGRE_LIBRARIES} xcb xcb-randr )
+endif()
 
 # Specify build paths
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${OGRE_BINARY_DIR}/lib")
@@ -281,8 +312,6 @@ endif(WIN32 OR APPLE)
 
 # Set up iOS overrides.
 if (OGRE_BUILD_PLATFORM_APPLE_IOS)
-  include_directories("${CMAKE_SOURCE_DIR}/OgreMain/include/iOS")
-
   # Set build variables
   set(XCODE_ATTRIBUTE_SDKROOT iphoneos)
   if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
@@ -324,7 +353,6 @@ elseif (ANDROID)
    set(OGRE_BUILD_COMPONENT_PAGING FALSE CACHE BOOL "Disable paging component on Android ES1" FORCE)
   endif()
 
-  set(OGRE_BUILD_TESTS FALSE CACHE BOOL "Disable tests on Android" FORCE)
   set(OGRE_BUILD_TOOLS FALSE CACHE BOOL "Disable tools on Android" FORCE)
   set(OGRE_STATIC TRUE CACHE BOOL "Forcing static build for Android" FORCE)
   set(OGRE_SIMD FALSE CACHE BOOL "Disable SIMD on Android" FORCE)
@@ -335,25 +363,25 @@ elseif(EMSCRIPTEN)
   add_definitions(-DEMSCRIPTEN=1 -D__EMSCRIPTEN__=1)
   set(TargetPlatform "Emscripten")
   set(OGRE_PLATFORM OGRE_PLATFORM_EMSCRIPTEN)
-
   set(OGRE_BUILD_RENDERSYSTEM_GLES2 TRUE CACHE BOOL "Forcing OpenGL ES 2 RenderSystem for Emscripten" FORCE)
-
   set(OGRE_CONFIG_ENABLE_STBI TRUE CACHE BOOL "Enable STBIImageCodec on Emscripten (Smaller Footprint)" FORCE)
   set(OGRE_CONFIG_ENABLE_FREEIMAGE FALSE CACHE BOOL "Disable Freeimage on Emscripten (Smaller Footprint)" FORCE)
   set(OGRE_BUILD_TOOLS FALSE CACHE BOOL "Disable tools on Emscripten" FORCE)
   set(OGRE_BUILD_TESTS FALSE CACHE BOOL "Disable tests on Emscripten" FORCE)
   set(OGRE_BUILD_COMPONENT_VOLUME FALSE CACHE BOOL "Disable volume component on Emscripten" FORCE)
   set(OGRE_BUILD_COMPONENT_PAGING FALSE CACHE BOOL "Disable paging component on Emscripten" FORCE)
-  set(OGRE_CONFIG_ALLOCATOR 1 CACHE STRING "Use default allocator on Emscripten" FORCE)
+  set(OGRE_CONFIG_ALLOCATOR 0 CACHE STRING "Use default allocator on Emscripten" FORCE)
   set(OGRE_CONFIG_CONTAINERS_USE_CUSTOM_ALLOCATOR FALSE CACHE BOOL "Containers use default allocator on Emscripten" FORCE)
 elseif (APPLE AND NOT OGRE_BUILD_PLATFORM_APPLE_IOS)
 
   set(XCODE_ATTRIBUTE_SDKROOT macosx)
-  if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
-    execute_process(COMMAND xcodebuild -version -sdk "${XCODE_ATTRIBUTE_SDKROOT}" Path | head -n 1 OUTPUT_VARIABLE CMAKE_OSX_SYSROOT)
-    string(REGEX REPLACE "(\r?\n)+$" "" CMAKE_OSX_SYSROOT "${CMAKE_OSX_SYSROOT}")
-  else()
-    set(CMAKE_OSX_SYSROOT macosx)
+  if(NOT CMAKE_OSX_SYSROOT)
+    if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
+      execute_process(COMMAND xcodebuild -version -sdk "${XCODE_ATTRIBUTE_SDKROOT}" Path | head -n 1 OUTPUT_VARIABLE CMAKE_OSX_SYSROOT)
+      string(REGEX REPLACE "(\r?\n)+$" "" CMAKE_OSX_SYSROOT "${CMAKE_OSX_SYSROOT}")
+    else()
+      set(CMAKE_OSX_SYSROOT macosx)
+    endif()
   endif()
 
   set( CMAKE_XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES )
@@ -407,27 +435,69 @@ endif()
 
 # Customise what to build
 cmake_dependent_option(OGRE_STATIC "Static build" FALSE "" TRUE)
+set(OGRE_SHADER_COMPILATION_THREADING_MODE 1 CACHE STRING
+"Specify shader and PSO threading model:
+  0 - Disable.
+  1 - Use compatible API. Enable only if supported by compiler and OS.
+  2 - Force-enable.
+
+This setting is independent of OGRE_CONFIG_THREAD_PROVIDER.
+
+Option 1 means we will use compiler-assisted TLS (Thread Local Storage) to provide a
+backwards-compatible interface and ease porting to newer OgreNext versions.
+However this is only supported if OGRE_STATIC is true.
+
+Option 2 will disable the backwards-compatible interface, which means there may be compiler
+errors when porting to newer OgreNext versions. However, this works on dynamic DLLs builds."
+)
+if( OGRE_SHADER_COMPILATION_THREADING_MODE EQUAL 0 )
+	set( OGRE_SHADER_THREADING_BACKWARDS_COMPATIBLE_API TRUE )
+	set( OGRE_SHADER_THREADING_USE_TLS FALSE )
+elseif( OGRE_SHADER_COMPILATION_THREADING_MODE EQUAL 1 )
+	set( OGRE_SHADER_THREADING_BACKWARDS_COMPATIBLE_API TRUE )
+	set( OGRE_SHADER_THREADING_USE_TLS ${OGRE_STATIC} )
+else()
+	set( OGRE_SHADER_THREADING_BACKWARDS_COMPATIBLE_API FALSE )
+	set( OGRE_SHADER_THREADING_USE_TLS FALSE )
+endif()
 cmake_dependent_option(OGRE_BUILD_RENDERSYSTEM_D3D11 "Build Direct3D11 RenderSystem" TRUE "WIN32;DirectX11_FOUND OR WINDOWS_STORE OR WINDOWS_PHONE" FALSE)
-cmake_dependent_option(OGRE_BUILD_RENDERSYSTEM_GL3PLUS "Build OpenGL 3+ RenderSystem" TRUE "OPENGL_FOUND; NOT OGRE_BUILD_RENDERSYSTEM_GLES; NOT OGRE_BUILD_RENDERSYSTEM_GLES2;NOT WINDOWS_STORE;NOT WINDOWS_PHONE;NOT OGRE_BUILD_PLATFORM_APPLE_IOS" FALSE)
+cmake_dependent_option(OGRE_BUILD_RENDERSYSTEM_GL3PLUS "Build OpenGL 3+ RenderSystem" TRUE "OPENGL_FOUND; NOT APPLE; NOT OGRE_BUILD_RENDERSYSTEM_GLES; NOT OGRE_BUILD_RENDERSYSTEM_GLES2;NOT WINDOWS_STORE;NOT WINDOWS_PHONE;NOT OGRE_BUILD_PLATFORM_APPLE_IOS" FALSE)
 cmake_dependent_option(OGRE_GLSUPPORT_USE_EGL_HEADLESS "Use EGL. Required if you want to use GL3+ headless support (e.g. rendering on the Cloud without X11). If more than one GLSUPPORT is enabled, interface can be selected at runtime" FALSE "OGRE_BUILD_RENDERSYSTEM_GL3PLUS;EGL_FOUND" FALSE)
-cmake_dependent_option(OGRE_CONFIG_UNIX_NO_X11 "Avoid X11 dependencies as much as possible. OGRE_GLSUPPORT_USE_GLX won't be available" FALSE "OGRE_GLSUPPORT_USE_EGL_HEADLESS;UNIX" FALSE)
+if( UNIX AND NOT APPLE AND (NOT OGRE_BUILD_RENDERSYSTEM_GL3PLUS OR OGRE_GLSUPPORT_USE_EGL_HEADLESS) )
+	option(OGRE_CONFIG_UNIX_NO_X11 "Avoid X11 dependencies as much as possible. OGRE_GLSUPPORT_USE_GLX & OGRE_VULKAN_WINDOW_XCB won't be available" FALSE)
+endif()
 cmake_dependent_option(OGRE_GLSUPPORT_USE_GLX "Use GLX (Default / Native window). If more than one GLSUPPORT is enabled, interface can be selected at runtime" TRUE "OGRE_BUILD_RENDERSYSTEM_GL3PLUS;UNIX;NOT APPLE;NOT OGRE_CONFIG_UNIX_NO_X11" FALSE)
 cmake_dependent_option(OGRE_GLSUPPORT_USE_WGL "Use WGL (Default / Native window). If more than one GLSUPPORT is enabled, interface can be selected at runtime" TRUE "OGRE_BUILD_RENDERSYSTEM_GL3PLUS;WIN32" FALSE)
 cmake_dependent_option(OGRE_GLSUPPORT_USE_COCOA "Use Cocoa (Default / Native window). If more than one GLSUPPORT is enabled, interface can be selected at runtime" TRUE "OGRE_BUILD_RENDERSYSTEM_GL3PLUS;APPLE" FALSE)
+set( OGRE_GLSUPPORT_NUM_INTERFACES 0 )
 if( OGRE_GLSUPPORT_USE_GLX OR OGRE_GLSUPPORT_USE_WGL OR OGRE_GLSUPPORT_USE_COCOA )
 	math( EXPR OGRE_GLSUPPORT_NUM_INTERFACES "${OGRE_GLSUPPORT_NUM_INTERFACES} + 1" )
 endif()
 if( OGRE_GLSUPPORT_USE_EGL_HEADLESS )
 	math( EXPR OGRE_GLSUPPORT_NUM_INTERFACES "${OGRE_GLSUPPORT_NUM_INTERFACES} + 1" )
 endif()
-cmake_dependent_option(OGRE_BUILD_RENDERSYSTEM_GLES2 "Build OpenGL ES 2.x RenderSystem" FALSE "OPENGLES_FOUND;NOT WINDOWS_STORE;NOT WINDOWS_PHONE" FALSE)
+cmake_dependent_option(OGRE_BUILD_RENDERSYSTEM_GLES2 "Build OpenGL ES 2.x RenderSystem" FALSE "OPENGLES2_FOUND;NOT WINDOWS_STORE;NOT WINDOWS_PHONE" FALSE)
 cmake_dependent_option(OGRE_BUILD_RENDERSYSTEM_VULKAN "Build Vulkan RenderSystem" TRUE "Vulkan_FOUND" FALSE)
+cmake_dependent_option(OGRE_VULKAN_USE_SWAPPY "Vulkan: Use Swappy Frame Pacing (Recommended)" TRUE "ANDROID;AndroidSwappy_FOUND" FALSE)
+cmake_dependent_option(OGRE_VULKAN_WINDOW_NULL "Allow headless support. If more than one OGRE_VULKAN_WINDOW is enabled, interface can be selected at runtime" FALSE "OGRE_BUILD_RENDERSYSTEM_VULKAN" FALSE)
+cmake_dependent_option(OGRE_VULKAN_WINDOW_WIN32 "Use Win32 (Default / Native window). If more than one OGRE_VULKAN_WINDOW is enabled, interface can be selected at runtime" TRUE "OGRE_BUILD_RENDERSYSTEM_VULKAN;WIN32" FALSE)
+cmake_dependent_option(OGRE_VULKAN_WINDOW_XCB "Use X11 / xcb (Default / Native window). If more than one OGRE_VULKAN_WINDOW is enabled, interface can be selected at runtime" TRUE "OGRE_BUILD_RENDERSYSTEM_VULKAN;UNIX;NOT ANDROID;NOT OGRE_CONFIG_UNIX_NO_X11" FALSE)
+cmake_dependent_option(OGRE_VULKAN_WINDOW_ANDROID "Use Android (Default / 'ANative' window). If more than one OGRE_VULKAN_WINDOW is enabled, interface can be selected at runtime" TRUE "OGRE_BUILD_RENDERSYSTEM_VULKAN;ANDROID" FALSE)
+if( OGRE_BUILD_RENDERSYSTEM_VULKAN AND OGRE_CONFIG_UNIX_NO_X11 )
+	set(OGRE_VULKAN_WINDOW_NULL ON CACHE BOOL "Forced on due to OGRE_CONFIG_UNIX_NO_X11" FORCE)
+endif()
 if( APPLE )
     option(OGRE_BUILD_PLATFORM_APPLE_IOS "Build For iOS (Apple only)" FALSE)
     option(OGRE_BUILD_RENDERSYSTEM_METAL "Build Metal RenderSystem (Apple only)" TRUE)
 endif()
 option(OGRE_BUILD_PLUGIN_PFX "Build ParticleFX plugin" TRUE)
+option(OGRE_BUILD_PLUGIN_PFX2 "Build ParticleFX2 plugin" TRUE)
 
+option(OGRE_IDSTRING_USE_128 "Ogre will use 128 for IdString to reduce chances of collisions. Use this if you have approximately >= 10.000 meshes or materials" FALSE)
+
+option( OGRE_ADDRESS_SANITIZER_ASAN "Build with Asan (Address Sanitizer)" OFF )
+
+option( OGRE_BUILD_COMPONENT_ATMOSPHERE "Component to use atmosphere (e.g. sky), can be used by HlmsPbs" TRUE )
 cmake_dependent_option(OGRE_BUILD_COMPONENT_HLMS_PBS
 "PBS Stands for Physically Based Shading and it's the default material for most entities and meshes. This is the 'desktop' version for OpenGL 3.3+ and D3D11." TRUE "" FALSE)
 cmake_dependent_option(OGRE_BUILD_COMPONENT_HLMS_UNLIT
@@ -437,8 +507,9 @@ cmake_dependent_option(OGRE_BUILD_COMPONENT_PAGING "Build Paging component" FALS
 option( OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS "Component to use planar reflections, can be used by both HlmsPbs & HlmsUnlit" FALSE )
 cmake_dependent_option(OGRE_BUILD_COMPONENT_MESHLODGENERATOR "Build MeshLodGenerator component" TRUE "" FALSE)
 cmake_dependent_option(OGRE_BUILD_COMPONENT_VOLUME "Build Volume component" FALSE "" FALSE)
-cmake_dependent_option(OGRE_BUILD_COMPONENT_PROPERTY "Build Property component" FALSE "Boost_FOUND" FALSE)
+cmake_dependent_option(OGRE_BUILD_COMPONENT_PROPERTY "Build Property component" TRUE "" FALSE)
 cmake_dependent_option(OGRE_BUILD_COMPONENT_OVERLAY "Build Overlay component" TRUE "FREETYPE_FOUND OR OGRE_BUILD_PLATFORM_WINRT OR OGRE_BUILD_PLATFORM_WINDOWS_PHONE" FALSE)
+cmake_dependent_option(OGRE_BUILD_COMPONENT_DEAR_IMGUI "Build Dear Imgui integration component" TRUE "DearImgui_FOUND" FALSE)
 cmake_dependent_option(OGRE_BUILD_LIBS_AS_FRAMEWORKS "Build frameworks for libraries on OS X." TRUE "APPLE;NOT OGRE_BUILD_PLATFORM_APPLE_IOS" FALSE)
 
 option(OGRE_BUILD_SAMPLES2 "Build Ogre new demos (2.1)" TRUE)
@@ -449,23 +520,27 @@ option(OGRE_BUILD_TESTS "Build the unit tests & PlayPen" FALSE)
 option(OGRE_CONFIG_DOUBLE "Use doubles instead of floats in Ogre" FALSE)
 option(OGRE_CONFIG_NODE_INHERIT_TRANSFORM "Tells the node whether it should inherit full transform from it's parent node or derived position, orientation and scale" FALSE)
 
-
 set(OGRE_PLUGIN_LIB_PREFIX "" CACHE STRING "Prefix dynamically linked plugins, e.g. 'lib' (GCC and Clang only)")
 
 if (WINDOWS_STORE OR WINDOWS_PHONE)
 # WinRT can only use the standard allocator
-set(OGRE_CONFIG_ALLOCATOR 1 CACHE STRING "Forcing Standard Allocator for WinRT" FORCE)
+set(OGRE_CONFIG_ALLOCATOR 0 CACHE STRING "Forcing no Allocator for WinRT" FORCE)
 else ()
-set(OGRE_CONFIG_ALLOCATOR 1 CACHE STRING
+set(OGRE_CONFIG_ALLOCATOR 0 CACHE STRING
 "Specify the memory allocator to use. Possible values:
-  1 - Standard allocator
-  2 - nedmalloc - NOT RECOMMENDED - Only useful in WinXP & for debugging mem. corruption - Has known issues see https://github.com/ned14/nedmalloc/issues/15
+  0 - None
+  1 - Standard allocator. Supports additional debugging (see OGRE_CONFIG_MEMTRACK)
   3 - User-provided allocator
-  4 - nedmalloc with pooling - NOT RECOMMENDED - See nedmalloc issues.
   5 - Debug allocator that will assert on most forms of memory corruption and provides deterministic memory addressing (for easier debugging w/ data breakpoints). Not indended for release or deployment. You may want to tweak OGRE_TRACK_POOL_SIZE in OgreMain/src/OgreMemoryTrackAlloc.cpp."
 )
 endif ()
 
+set( OGRE_EMBED_DEBUG_MODE auto CACHE STRING
+	"Specify whether OGRE_DEBUG_MODE should be embedded into OgreBuildSettings.h
+	auto - Use 'never' for multi-config generators like MSVC & XCode. Use 'always' for Make & Ninja generators
+	never - Compile headers will determine whether it's a debug build based on macros like _DEBUG, DEBUG & NDEBUG
+	always - OGRE_DEBUG_MODE is embedded into OgreBuildSettings.h, its value is based on CMAKE_BUILD_TYPE"
+)
 set( OGRE_DEBUG_LEVEL_DEBUG 3 CACHE STRING
     "Specify debug level for debug builds:
     0 - None. Disabled. No checks done at all.
@@ -474,9 +549,12 @@ set( OGRE_DEBUG_LEVEL_DEBUG 3 CACHE STRING
     3 - High. We perform intensive validation without concerns for performance."
 )
 set( OGRE_DEBUG_LEVEL_RELEASE 0 CACHE STRING
-    "Specify debug level for Release, RelWithDebInfo and MinSizeRel builds. See OGRE_MAX_DEBUG_LEVEL_DEBUG" )
+    "Specify debug level for Release, RelWithDebInfo and MinSizeRel builds. See OGRE_DEBUG_LEVEL_DEBUG" )
 
 cmake_dependent_option(OGRE_CONFIG_CONTAINERS_USE_CUSTOM_ALLOCATOR "STL containers in Ogre use the custom allocator" TRUE "" FALSE)
+if( OGRE_CONFIG_ALLOCATOR EQUAL 0 )
+    set(OGRE_CONFIG_CONTAINERS_USE_CUSTOM_ALLOCATOR FALSE CACHE BOOL "Forced off when OGRE_CONFIG_ALLOCATOR = 0" FORCE)
+endif()
 option(OGRE_CONFIG_STRING_USE_CUSTOM_ALLOCATOR "Ogre String uses the custom allocator" FALSE)
 option(OGRE_CONFIG_MEMTRACK_DEBUG "Enable Ogre's memory tracker in debug mode" FALSE)
 option(OGRE_CONFIG_MEMTRACK_RELEASE "Enable Ogre's memory tracker in release mode" FALSE)
@@ -532,6 +610,8 @@ endif ()
 option(OGRE_UNITY_BUILD "Enable unity build for Ogre." FALSE)
 set(OGRE_UNITY_FILES_PER_UNIT "50" CACHE STRING "Number of files per compilation unit in Unity build.")
 
+option(OGRE_PROFILING_TEXTURES "Enables profiling of texture loading. This is independent from OGRE_PROFILING_PROVIDER. Overhead is low so you may want to enable it without much worrying about performance." FALSE)
+
 set( OGRE_PROFILING_PROVIDER "none" CACHE STRING
 	"Enable profiling of Ogre for performance analysis. Profiling has a performance
 	overhead so you may want to ship your game with this option disabled.
@@ -547,8 +627,26 @@ if( NOT Remotery_FOUND AND OGRE_PROFILING_PROVIDER STREQUAL "remotery" )
 	set( OGRE_PROFILING_PROVIDER "none" )
 endif()
 
+if( OGRE_ADDRESS_SANITIZER_ASAN )
+	if( APPLE )
+		set( CMAKE_XCODE_GENERATE_SCHEME ON )
+		set( CMAKE_XCODE_SCHEME_ADDRESS_SANITIZER ON )
+		set( CMAKE_XCODE_SCHEME_ADDRESS_SANITIZER_USE_AFTER_RETURN ON )
+	elseif( UNIX )
+		set( CMAKE_C_FLAGS
+			"${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address" )
+		set( CMAKE_CXX_FLAGS
+			"${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address" )
+		set( CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fsanitize=address" )
+	elseif( MSVC )
+		set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS_DEBUG} /fsanitize=address" )
+		set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_DEBUG} /fsanitize=address" )
+	endif()
+endif()
+
 # hide advanced options
 mark_as_advanced(
+  OGRE_ADDRESS_SANITIZER_ASAN
   OGRE_CONFIG_DOUBLE
   OGRE_CONFIG_NODE_INHERIT_TRANSFORM
   OGRE_CONFIG_ALLOCATOR
@@ -652,11 +750,8 @@ add_subdirectory(CMake)
 # provide option to install dependencies on Windows
 include(InstallDependencies)
 
-
 # Provide CPack packaging target
 include(Packaging)
 
-
 # Show feature summary
-include(FeatureSummary)
-
+include(OgreFeatureSummary)

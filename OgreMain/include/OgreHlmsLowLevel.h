@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "OgreHlms.h"
 #include "OgreMatrix4.h"
+
 #include "OgreHeaderPrefix.h"
 
 namespace Ogre
@@ -38,19 +39,19 @@ namespace Ogre
     struct QueuedRenderable;
 
     /** \addtogroup Component
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Material
-    *  @{
-    */
+     *  @{
+     */
 
     /** This is an HLMS implementation that acts as proxy to use the Material system from
         Ogre 1.9
         The older material system is data-driven (thanks to AutoParamDataSource) compared
         to HLMS where the user needs to write its own implementation in C++ (or modify an
         exisiting one). Old material system is still useful for:
-            * Quick prototyping of shaders
-            * Postprocessing effects.
+            + Quick prototyping of shaders
+            + Postprocessing effects.
         Take in mind that the old system is __slow__ compared to Hlms. So don't use this
         proxy for hundreds or more entities.
     @remarks
@@ -61,23 +62,25 @@ namespace Ogre
     {
         OGRE_SIMD_ALIGNED_DECL( Matrix4, mTempXform[256] );
         AutoParamDataSource *mAutoParamDataSource;
-        SceneManager    *mCurrentSceneManager;
+        SceneManager        *mCurrentSceneManager;
 
         const HlmsCache *createShaderCacheEntry( uint32 renderableHash, const HlmsCache &passCache,
-                                                 uint32 finalHash,
-                                                 const QueuedRenderable &queuedRenderable ) override;
+                                                 uint32                  finalHash,
+                                                 const QueuedRenderable &queuedRenderable,
+                                                 HlmsCache *reservedStubEntry, uint64 deadline,
+                                                 size_t tid ) override;
 
         HlmsDatablock *createDatablockImpl( IdString datablockName, const HlmsMacroblock *macroblock,
                                             const HlmsBlendblock *blendblock,
-                                            const HlmsParamVec &paramVec ) override;
+                                            const HlmsParamVec   &paramVec ) override;
 
-        void setupRootLayout( RootLayout &rootLayout ) override;
+        void setupRootLayout( RootLayout &rootLayout, size_t tid ) override;
 
     public:
         HlmsLowLevel();
         ~HlmsLowLevel() override;
 
-        AutoParamDataSource* _getAutoParamDataSource() const    { return mAutoParamDataSource; }
+        AutoParamDataSource *_getAutoParamDataSource() const { return mAutoParamDataSource; }
 
         void calculateHashFor( Renderable *renderable, uint32 &outHash, uint32 &outCasterHash ) override;
 
@@ -107,7 +110,7 @@ namespace Ogre
     /** @} */
     /** @} */
 
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

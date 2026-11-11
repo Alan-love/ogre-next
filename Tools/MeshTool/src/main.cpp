@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include "OgreLodStrategyManager.h"
 #include "OgreHardwareVertexBuffer.h"
 #include "OgrePixelCountLodStrategy.h"
+#include "OgreFileSystemLayer.h"
 #include "OgreLodConfig.h"
 #include "OgreRoot.h"
 
@@ -46,7 +47,14 @@ THE SOFTWARE.
 #include "OgreNULLRenderSystem.h"
 #endif
 
+#if defined( __GNUC__ ) && !defined( __clang__ )
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wsuggest-override"
+#endif
 #include "XML/tinyxml.h"
+#if defined( __GNUC__ ) && !defined( __clang__ )
+#    pragma GCC diagnostic pop
+#endif
 #include "XML/OgreXMLMeshSerializer.h"
 #include "XML/OgreXMLSkeletonSerializer.h"
 
@@ -54,10 +62,15 @@ THE SOFTWARE.
 #include <sstream>
 #include <sys/stat.h>
 
+#if OGRE_PLATFORM == OGRE_PLATFORM_LINUX
+#    include <limits.h>
+#    include <unistd.h>
+#endif
+
 using namespace std;
 using namespace Ogre;
 
-void help(void)
+void help()
 {
     // OgreMeshTool <Name> (2.1.0) unstable
     cout << "OgreMeshTool " << OGRE_VERSION_NAME << " "
@@ -234,7 +247,7 @@ void parseOpts(UnaryOptionList& unOpts, BinaryOptionList& binOpts)
     BinaryOptionList::iterator bi = binOpts.find("-l");
     if (!bi->second.empty())
     {
-        opts.numLods = StringConverter::parseInt(bi->second);
+        opts.numLods = StringConverter::parseUnsignedShort(bi->second);
     }
 
     bi = binOpts.find("-d");
@@ -254,7 +267,7 @@ void parseOpts(UnaryOptionList& unOpts, BinaryOptionList& binOpts)
     bi = binOpts.find("-f");
     if (!bi->second.empty())
     {
-        opts.lodFixed = StringConverter::parseInt(bi->second);
+        opts.lodFixed = StringConverter::parseSizeT(bi->second);
         opts.usePercent = false;
     }
 
@@ -426,7 +439,7 @@ void buildLod(v1::MeshPtr& mesh)
     bool askLodDtls = opts.interactive;
     if (genLod)
     {
-        if( mesh.isNull() )
+        if( !mesh )
         {
             cout << "LOD Generation only works on v1 meshes at the moment." << endl;
             cout << "Export it as -v1, run the command again, and re-export it to -v2" << endl;
@@ -616,7 +629,7 @@ void buildLod(v1::MeshPtr& mesh)
                                 if (lodLevel.reductionValue > minReduction && lodLevel.reductionValue <= 100.0)
                                 {
                                     minReduction = lodLevel.reductionValue;
-                                    lodLevel.reductionValue *= 0.01;
+                                    lodLevel.reductionValue *= Real( 0.01 );
                                     if (minReduction == 100.0)
                                     {
                                         cout << "\nCan't insert more LOD levels!";
@@ -761,11 +774,13 @@ void checkColour(v1::VertexData* vdata, bool& hasColour, bool& hasAmbiguousColou
         {
         case VET_COLOUR:
             hasAmbiguousColour = true;
+            OGRE_FALLTHROUGH;
 
         case VET_COLOUR_ABGR:
         case VET_COLOUR_ARGB:
             hasColour = true;
             originalType = elem.getType();
+            break;
 
         default:
             // do nothing
@@ -897,9 +912,9 @@ DataStreamPtr openFile( String source )
                     "File " + source + " not found.", "OgreMeshTool");
     }
     stat( source.c_str(), &tagStat );
-    MemoryDataStream* memstream = new MemoryDataStream(source, tagStat.st_size, true);
-    size_t result = fread( (void*)memstream->getPtr(), 1, tagStat.st_size, pFile );
-    if (result != tagStat.st_size)
+    MemoryDataStream* memstream = new MemoryDataStream(source, (size_t)tagStat.st_size, true);
+    size_t result = fread( (void*)memstream->getPtr(), 1, (size_t)tagStat.st_size, pFile );
+    if (result != (size_t)tagStat.st_size)
     {
         OGRE_EXCEPT(Exception::ERR_INTERNAL_ERROR,
                     "Unexpected error while reading file " + source, "OgreMeshTool");
@@ -947,7 +962,7 @@ bool loadMesh( const String &source, v1::MeshPtr &v1MeshPtr, MeshPtr &v2MeshPtr,
             cout << "Failed." << endl;
             if( v1MeshPtr )
                 v1::MeshManager::getSingleton().remove( v1MeshPtr );
-            v1MeshPtr.setNull();
+            v1MeshPtr.reset();
         }
 
         if( !retVal )
@@ -965,7 +980,7 @@ bool loadMesh( const String &source, v1::MeshPtr &v1MeshPtr, MeshPtr &v2MeshPtr,
             catch( Exception & )
             {
                 cout << "Failed." << endl;
-                v2MeshPtr.setNull();
+                v2MeshPtr.reset();
             }
         }
     }
@@ -1039,9 +1054,9 @@ void saveMesh( const String &destination, v1::MeshPtr &v1Mesh, MeshPtr &v2Mesh,
 
     if( dstExt == "mesh" )
     {
-        if( (!opts.exportAsV2 && !v1Mesh.isNull()) || opts.exportAsV1 )
+        if( (!opts.exportAsV2 && v1Mesh) || opts.exportAsV1 )
         {
-            if( opts.exportAsV1 && v1Mesh.isNull() )
+            if( opts.exportAsV1 && !v1Mesh )
             {
                 v1Mesh = v1::MeshManager::getSingleton().createManual( "conversionDstV1",
                                                                        ResourceGroupManager::
@@ -1057,21 +1072,21 @@ void saveMesh( const String &destination, v1::MeshPtr &v1Mesh, MeshPtr &v2Mesh,
         }
         else
         {
-            if( v2Mesh.isNull() )
+            if( !v2Mesh )
             {
                 v2Mesh = MeshManager::getSingleton().createManual( "v2Mesh",
                                                                    ResourceGroupManager::
                                                                    DEFAULT_RESOURCE_GROUP_NAME );
             }
 
-            if( !v1Mesh.isNull() )
+            if( v1Mesh )
                 v2Mesh->importV1( v1Mesh.get(), false, false, false );
 
             cout << "Saving as a v2 mesh..." << endl;
             meshSerializer2.exportMesh( v2Mesh.get(), destination, opts.targetVersionV2, opts.endian );
         }
 
-        if( !v1Skeleton.isNull() )
+        if( v1Skeleton )
         {
             skeletonSerializer->exportSkeleton( v1Skeleton.get(), destination + ".skeleton",
                                                 v1::SKELETON_VERSION_LATEST, opts.endian );
@@ -1079,7 +1094,7 @@ void saveMesh( const String &destination, v1::MeshPtr &v1Mesh, MeshPtr &v2Mesh,
     }
     else if( dstExt == "skeleton" )
     {
-        if( !v1Skeleton.isNull() )
+        if( v1Skeleton )
         {
             skeletonSerializer->exportSkeleton( v1Skeleton.get(), destination,
                                                 v1::SKELETON_VERSION_LATEST, opts.endian );
@@ -1087,7 +1102,7 @@ void saveMesh( const String &destination, v1::MeshPtr &v1Mesh, MeshPtr &v2Mesh,
     }
     else if( dstExt == "xml" )
     {
-        if( v1Mesh.isNull() && !v2Mesh.isNull() )
+        if( !v1Mesh && v2Mesh )
         {
             v1Mesh = v1::MeshManager::getSingleton().createManual(
                                     "conversionDstXML",
@@ -1095,13 +1110,13 @@ void saveMesh( const String &destination, v1::MeshPtr &v1Mesh, MeshPtr &v2Mesh,
             v1Mesh->importV2( v2Mesh.get() );
         }
 
-        if( !v1Mesh.isNull() )
+        if( v1Mesh )
         {
             cout << "Saving as a XML mesh..." << endl;
             xmlMeshSerializer.exportMesh( v1Mesh.get(), destination );
         }
 
-        if( !v1Skeleton.isNull() )
+        if( v1Skeleton )
         {
             cout << "Saving as a XML skeleton..." << endl;
             xmlSkeletonSerializer.exportSkeleton( v1Skeleton.get(), destination );
@@ -1149,6 +1164,69 @@ void restoreWorkingDir()
 #endif
 }
 
+Ogre::String getExecutableDirectory()
+{
+#if OGRE_PLATFORM == OGRE_PLATFORM_LINUX
+    char path[PATH_MAX];
+    const ssize_t length = readlink( "/proc/self/exe", path, sizeof( path ) - 1 );
+    if( length == -1 )
+        return Ogre::String();
+
+    path[length] = '\0';
+
+    const Ogre::String executablePath( path );
+    const Ogre::String::size_type charPos = executablePath.find_last_of( '/' );
+    if( charPos == Ogre::String::npos )
+        return Ogre::String();
+
+    return executablePath.substr( 0, charPos );
+#else
+    return Ogre::String();
+#endif
+}
+
+Ogre::String findPluginsConfigFile()
+{
+#ifndef OGRE_STATIC_LIB
+#    if OGRE_DEBUG_MODE
+    const Ogre::String configFileName( "plugins_tools_d.cfg" );
+#    else
+    const Ogre::String configFileName( "plugins_tools.cfg" );
+#    endif
+
+    // Prefer a config file in the current working directory. This is the usual case when
+    // running the tool from the build directory.
+    if( Ogre::FileSystemLayer::fileExists( configFileName ) )
+        return configFileName;
+
+#    if OGRE_PLATFORM == OGRE_PLATFORM_LINUX
+    const Ogre::String executableDir( getExecutableDirectory() );
+    if( !executableDir.empty() )
+    {
+#        ifdef OGRE_NAME_IS_OGRE_NEXT
+        const Ogre::String installConfigDir = executableDir + "/../share/OGRE-Next/";
+#        else
+        const Ogre::String installConfigDir = executableDir + "/../share/OGRE/";
+#        endif
+        const Ogre::String candidates[] = {
+            executableDir + "/" + configFileName,
+            installConfigDir + configFileName,
+        };
+
+        for( size_t i = 0; i < sizeof( candidates ) / sizeof( candidates[0] ); ++i )
+        {
+            if( Ogre::FileSystemLayer::fileExists( candidates[i] ) )
+                return candidates[i];
+        }
+    }
+#    endif
+
+    return configFileName;
+#else
+    return Ogre::String();
+#endif
+}
+
 int main(int numargs, char** args)
 {
     Root *root = 0;
@@ -1162,20 +1240,12 @@ int main(int numargs, char** args)
     int retCode = 0;
     try
     {
-        Ogre::String pluginsPath;
-        // only use plugins.cfg if not static
-#ifndef OGRE_STATIC_LIB
-#if OGRE_DEBUG_MODE
-        pluginsPath = "plugins_tools_d.cfg";
-#else
-        pluginsPath = "plugins_tools.cfg";
-#endif
-#endif
+        const Ogre::String pluginsPath = findPluginsConfigFile();
         logManager = OGRE_NEW LogManager();
         logManager->createLog( "OgreMeshTool.log", true, true );
         LogManager::getSingleton().getDefaultLog()->setLogDetail( LL_LOW );
         setWorkingDirectory();
-        root = OGRE_NEW Root( pluginsPath, "", "OgreMeshTool.log" ) ;
+        root = OGRE_NEW Ogre::Root( nullptr, pluginsPath, "", "OgreMeshTool.log" ) ;
         restoreWorkingDir();
 
 #ifdef OGRE_STATIC_LIB
@@ -1247,7 +1317,7 @@ int main(int numargs, char** args)
 
         if( opts.unoptimizeBuffer )
         {
-            if( !v1Mesh.isNull() )
+            if( v1Mesh )
             {
                 if( v1Mesh->sharedVertexData[VpNormal] )
                 {
@@ -1258,7 +1328,7 @@ int main(int numargs, char** args)
                 v1Mesh->dearrangeToInefficient();
             }
 
-            if( !v2Mesh.isNull() )
+            if( v2Mesh )
                 v2Mesh->dearrangeToInefficient();
         }
 
@@ -1299,7 +1369,7 @@ int main(int numargs, char** args)
             }
         }
 
-        if( !v1Mesh.isNull() )
+        if( v1Mesh )
         {
             vertexBufferReorg(*mesh);
 
@@ -1313,9 +1383,9 @@ int main(int numargs, char** args)
 
         if( opts.optimizeBuffer )
         {
-            if( !v1Mesh.isNull() )
+            if( v1Mesh )
                 mesh->arrangeEfficient( opts.halfPos, opts.halfTexCoords, opts.qTangents );
-            if( !v2Mesh.isNull() )
+            if( v2Mesh )
                 v2Mesh->arrangeEfficient( opts.halfPos, opts.halfTexCoords, opts.qTangents );
         }
 
@@ -1326,7 +1396,7 @@ int main(int numargs, char** args)
 
         if( opts.optimizeForShadowMapping )
         {
-            if( !v1Mesh.isNull() )
+            if( v1Mesh )
             {
                 mesh->_updateCompiledBoneAssignments();
                 v1::Mesh::msOptimizeForShadowMapping = !opts.stripShadowMapping;
@@ -1334,7 +1404,7 @@ int main(int numargs, char** args)
                 v1::Mesh::msOptimizeForShadowMapping = false;
             }
 
-            if( !v2Mesh.isNull() )
+            if( v2Mesh )
             {
                 Mesh::msOptimizeForShadowMapping = !opts.stripShadowMapping;
                 v2Mesh->prepareForShadowMapping( false );
@@ -1342,7 +1412,7 @@ int main(int numargs, char** args)
             }
         }
 
-        if( !opts.dontOptimiseAnimations && !v1Skeleton.isNull() )
+        if( !opts.dontOptimiseAnimations && v1Skeleton )
         {
             v1Skeleton->optimiseAllAnimations();
         }

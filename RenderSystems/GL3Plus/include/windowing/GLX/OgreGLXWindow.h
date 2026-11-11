@@ -28,14 +28,16 @@ THE SOFTWARE.
 
 #ifndef _OgreGLXWindow_H_
 #define _OgreGLXWindow_H_
-
 #include "OgreWindow.h"
+
+#include <X11/Xlib.h>
 #include "OgreGLXContext.h"
 #include "OgreGLXGLSupport.h"
-#include <X11/Xlib.h>
 
-namespace Ogre 
+namespace Ogre
 {
+    OGRE_ASSUME_NONNULL_BEGIN
+
     class _OgrePrivate GLXWindow final : public Window
     {
     protected:
@@ -46,9 +48,9 @@ namespace Ogre
         bool mIsExternal;
         bool mIsExternalGLControl;
 
-        GLXGLSupport* mGLSupport;
+        GLXGLSupport *mGLSupport;
         ::Window      mWindow;
-        GLXContext*   mContext;
+        GLXContext   *mContext;
 
         void switchFullScreen( bool fullscreen );
 
@@ -57,44 +59,45 @@ namespace Ogre
     public:
         GLXWindow( const String &title, uint32 width, uint32 height, bool fullscreenMode,
                    PixelFormatGpu depthStencilFormat, const NameValuePairList *miscParams,
-                   GLXGLSupport* glsupport );
+                   GLXGLSupport *glsupport );
         ~GLXWindow() override;
 
-        void _initialize( TextureGpuManager *textureManager ) override;
+        void _initialize( TextureGpuManager                     *textureManager,
+                          const NameValuePairList *ogre_nullable miscParams ) override;
 
         void setVSync( bool vSync, uint32 vSyncInterval ) override;
-        void reposition( int32 left, int32 top) override;
-        
+        void reposition( int32 left, int32 top ) override;
+
         void requestFullscreenSwitch( bool goFullscreen, bool borderless, uint32 monitorIdx,
-                                      uint32 width, uint32 height,
-                                      uint32 frequencyNumerator, uint32 frequencyDenominator ) override;
-        
-        /** @copydoc see RenderWindow::destroy */
+                                      uint32 width, uint32 height, uint32 frequencyNumerator,
+                                      uint32 frequencyDenominator ) override;
+
+        /** @copydoc Window::destroy */
         virtual void destroy() override;
-        
-        /** @copydoc see RenderWindow::isClosed */
+
+        /** @copydoc Window::isClosed */
         virtual bool isClosed() const override;
-        
-        /** @copydoc see RenderWindow::isVisible */
+
+        /** @copydoc Window::isVisible */
         bool isVisible() const override;
 
-        virtual void _setVisible(bool visible) override;
+        virtual void _setVisible( bool visible ) override;
 
-        /** @copydoc see RenderWindow::isHidden */
+        /** @copydoc Window::isHidden */
         bool isHidden() const override { return mHidden; }
 
-        /** @copydoc see RenderWindow::setHidden */
-        void setHidden(bool hidden) override;
-        
-        /** @copydoc see RenderWindow::resize */
+        /** @copydoc Window::setHidden */
+        void setHidden( bool hidden ) override;
+
+        /** @copydoc Window::requestResolution */
         void requestResolution( uint32 width, uint32 height ) override;
 
-        /** @copydoc see RenderWindow::windowMovedOrResized */
+        /** @copydoc Window::windowMovedOrResized */
         void windowMovedOrResized() override;
-        
-        /** @copydoc see RenderWindow::swapBuffers */
+
+        /** @copydoc Window::swapBuffers */
         void swapBuffers() override;
-        
+
         /**
            @remarks
            * Get custom attribute; the following attributes are valid:
@@ -104,10 +107,12 @@ namespace Ogre
            * DISPLAYNAME    The X Server name for the connected display.
            * ATOM          The X Atom used in client delete events.
            */
-        virtual void getCustomAttribute( IdString name, void* pData ) override;
-        
+        virtual void getCustomAttribute( IdString name, void *pData ) override;
+
         bool requiresTextureFlipping() const { return false; }
     };
-}
+
+    OGRE_ASSUME_NONNULL_END
+}  // namespace Ogre
 
 #endif

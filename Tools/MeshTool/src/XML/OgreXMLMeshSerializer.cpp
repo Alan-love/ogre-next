@@ -28,6 +28,7 @@ THE SOFTWARE.
 
 
 #include "XML/OgreXMLMeshSerializer.h"
+#include "OgreBitwise.h"
 #include "OgreSubMesh.h"
 #include "OgreLogManager.h"
 #include "OgreSkeleton.h"
@@ -240,7 +241,7 @@ namespace v1 {
         subMeshNode->SetAttribute("usesharedvertices", 
             StringConverter::toString(s->useSharedVertices) );
         // bool use32BitIndexes
-        bool use32BitIndexes = (!s->indexData[VpNormal]->indexBuffer.isNull() &&
+        bool use32BitIndexes = (s->indexData[VpNormal]->indexBuffer &&
             s->indexData[VpNormal]->indexBuffer->getType() == HardwareIndexBuffer::IT_32BIT);
         subMeshNode->SetAttribute("use32bitindexes", 
             StringConverter::toString( use32BitIndexes ));
@@ -265,6 +266,18 @@ namespace v1 {
             break;
         case OT_TRIANGLE_STRIP:
             subMeshNode->SetAttribute("operationtype", "triangle_strip");
+            break;
+        case OT_TRIANGLE_LIST_ADJ:
+            subMeshNode->SetAttribute( "operationtype", "triangle_list_adj" );
+            break;
+        case OT_TRIANGLE_STRIP_ADJ:
+            subMeshNode->SetAttribute( "operationtype", "triangle_strip_adj" );
+            break;
+        case OT_LINE_LIST_ADJ:
+            subMeshNode->SetAttribute( "operationtype", "line_list_adj" );
+            break;
+        case OT_LINE_STRIP_ADJ:
+            subMeshNode->SetAttribute( "operationtype", "line_strip_adj" );
             break;
         }
 
@@ -462,6 +475,18 @@ namespace v1 {
                         case VET_UBYTE4: 
                             type = "ubyte4"; 
                             break;
+                        case VET_SHORT2_SNORM:
+                            type = "short2_snorm";
+                            break;
+                        case VET_SHORT4_SNORM:
+                            type = "short4_snorm";
+                            break;
+                        case VET_USHORT2_NORM:
+                            type = "ushort2_norm";
+                            break;
+                        case VET_USHORT4_NORM:
+                            type = "ushort4_norm";
+                            break;
                         }
                         vbNode->SetAttribute(
                             "texture_coord_dimensions_" + StringConverter::toString(numTextureCoords), type);
@@ -583,16 +608,42 @@ namespace v1 {
                             dataNode->SetAttribute("x", StringConverter::toString(*pFloat++));
                             break;
                         case VET_SHORT2:
+                        case VET_USHORT2_NORM:
                             elem.baseVertexPointerToElement(pVert, &pShort);
                             dataNode->SetAttribute("u", StringConverter::toString(*pShort++ / 65535.0f));
                             dataNode->SetAttribute("v", StringConverter::toString(*pShort++ / 65535.0f));
                             break;
                         case VET_SHORT4:
+                        case VET_USHORT4_NORM:
                             elem.baseVertexPointerToElement(pVert, &pShort);
                             dataNode->SetAttribute("u", StringConverter::toString(*pShort++ / 65535.0f));
                             dataNode->SetAttribute("v", StringConverter::toString(*pShort++ / 65535.0f));
                             dataNode->SetAttribute("w", StringConverter::toString(*pShort++ / 65535.0f));
                             dataNode->SetAttribute("x", StringConverter::toString(*pShort++ / 65535.0f));
+                            break;
+                        case VET_SHORT2_SNORM:
+                            elem.baseVertexPointerToElement( pVert, &pShort );
+                            dataNode->SetAttribute(
+                                "u", StringConverter::toString(
+                                         Bitwise::snorm16ToFloat( bit_cast<int16_t>( *pShort++ ) ) ) );
+                            dataNode->SetAttribute(
+                                "v", StringConverter::toString(
+                                         Bitwise::snorm16ToFloat( bit_cast<int16_t>( *pShort++ ) ) ) );
+                            break;
+                        case VET_SHORT4_SNORM:
+                            elem.baseVertexPointerToElement( pVert, &pShort );
+                            dataNode->SetAttribute(
+                                "u", StringConverter::toString(
+                                         Bitwise::snorm16ToFloat( bit_cast<int16_t>( *pShort++ ) ) ) );
+                            dataNode->SetAttribute(
+                                "v", StringConverter::toString(
+                                         Bitwise::snorm16ToFloat( bit_cast<int16_t>( *pShort++ ) ) ) );
+                            dataNode->SetAttribute(
+                                "w", StringConverter::toString(
+                                         Bitwise::snorm16ToFloat( bit_cast<int16_t>( *pShort++ ) ) ) );
+                            dataNode->SetAttribute(
+                                "x", StringConverter::toString(
+                                         Bitwise::snorm16ToFloat( bit_cast<int16_t>( *pShort++ ) ) ) );
                             break;
                         case VET_COLOUR: case VET_COLOUR_ARGB: case VET_COLOUR_ABGR:
                             elem.baseVertexPointerToElement(pVert, &pColour);
@@ -719,7 +770,24 @@ namespace v1 {
                     sm->operationType = OT_POINT_LIST;
                     readFaces = false;
                 }
-
+                else if( !strcmp( optype, "triangle_list_adj" ) )
+                {
+                    sm->operationType = OT_TRIANGLE_LIST_ADJ;
+                }
+                else if( !strcmp( optype, "triangle_strip_adj" ) )
+                {
+                    sm->operationType = OT_TRIANGLE_STRIP_ADJ;
+                }
+                else if( !strcmp( optype, "line_strip_adj" ) )
+                {
+                    sm->operationType = OT_LINE_STRIP_ADJ;
+                    readFaces = false;
+                }
+                else if( !strcmp( optype, "line_list_adj" ) )
+                {
+                    sm->operationType = OT_LINE_LIST_ADJ;
+                    readFaces = false;
+                }
             }
 
             const char* tmp = smElem->Attribute("usesharedvertices");
@@ -734,13 +802,13 @@ namespace v1 {
             if (readFaces)
             {
                 TiXmlElement* faces = smElem->FirstChildElement("faces");
-                int actualCount = 0;
+                size_t actualCount = 0;
                 for (TiXmlElement *faceElem = faces->FirstChildElement(); faceElem != 0; faceElem = faceElem->NextSiblingElement())
                 {
                         actualCount++;
                 }
                 const char *claimedCount_ = faces->Attribute("count");
-                if (claimedCount_ && StringConverter::parseInt(claimedCount_)!=actualCount)
+                if (claimedCount_ && StringConverter::parseSizeT(claimedCount_)!=actualCount)
                 {
                     LogManager::getSingleton().stream()
                         << "WARNING: face count (" << actualCount << ") " <<
@@ -789,30 +857,30 @@ namespace v1 {
                     {
                         if (use32BitIndexes)
                         {
-                            *pInt++ = StringConverter::parseInt(faceElem->Attribute("v1"));
+                            *pInt++ = StringConverter::parseUnsignedInt(faceElem->Attribute("v1"));
                             if(sm->operationType == OT_LINE_LIST)
                             {
-                                *pInt++ = StringConverter::parseInt(faceElem->Attribute("v2"));
+                                *pInt++ = StringConverter::parseUnsignedInt(faceElem->Attribute("v2"));
                             }
                             // only need all 3 vertices if it's a trilist or first tri
                             else if (sm->operationType == OT_TRIANGLE_LIST || firstTri)
                             {
-                                *pInt++ = StringConverter::parseInt(faceElem->Attribute("v2"));
-                                *pInt++ = StringConverter::parseInt(faceElem->Attribute("v3"));
+                                *pInt++ = StringConverter::parseUnsignedInt(faceElem->Attribute("v2"));
+                                *pInt++ = StringConverter::parseUnsignedInt(faceElem->Attribute("v3"));
                             }
                         }
                         else
                         {
-                            *pShort++ = StringConverter::parseInt(faceElem->Attribute("v1"));
+                            *pShort++ = StringConverter::parseUnsignedShort(faceElem->Attribute("v1"));
                             if(sm->operationType == OT_LINE_LIST)
                             {
-                                *pShort++ = StringConverter::parseInt(faceElem->Attribute("v2"));
+                                *pShort++ = StringConverter::parseUnsignedShort(faceElem->Attribute("v2"));
                             }
                             // only need all 3 vertices if it's a trilist or first tri
                             else if (sm->operationType == OT_TRIANGLE_LIST || firstTri)
                             {
-                                *pShort++ = StringConverter::parseInt(faceElem->Attribute("v2"));
-                                *pShort++ = StringConverter::parseInt(faceElem->Attribute("v3"));
+                                *pShort++ = StringConverter::parseUnsignedShort(faceElem->Attribute("v2"));
+                                *pShort++ = StringConverter::parseUnsignedShort(faceElem->Attribute("v3"));
                             }
                         }
                         firstTri = false;
@@ -855,11 +923,11 @@ namespace v1 {
         ARGB *pCol;
 
         const char *claimedVertexCount_ = mGeometryNode->Attribute("vertexcount");
-        ptrdiff_t claimedVertexCount = 0;
+        size_t claimedVertexCount = 0;
         if (claimedVertexCount_)
         {
                 claimedVertexCount =
-                        StringConverter::parseInt(claimedVertexCount_);
+                        StringConverter::parseSizeT(claimedVertexCount_);
         }
         // Skip empty 
         if (claimedVertexCount_ && claimedVertexCount <= 0) return;
@@ -937,7 +1005,7 @@ namespace v1 {
             attrib = vbElem->Attribute("texture_coords");
             if (attrib && StringConverter::parseInt(attrib))
             {
-                unsigned short numTexCoords = StringConverter::parseInt(vbElem->Attribute("texture_coords"));
+                unsigned short numTexCoords = StringConverter::parseUnsignedShort(vbElem->Attribute("texture_coords"));
                 for (unsigned short tx = 0; tx < numTexCoords; ++tx)
                 {
                     // NB set is local to this buffer, but will be translated into a 
@@ -972,6 +1040,14 @@ namespace v1 {
                             vtype = VET_UBYTE4;
                         else if (!::strcmp(attrib,"colour"))
                             vtype = VET_COLOUR;
+                        else if (!::strcmp(attrib,"short2_snorm"))
+                            vtype = VET_SHORT2_SNORM;
+                        else if (!::strcmp(attrib,"short4_snorm"))
+                            vtype = VET_SHORT4_SNORM;
+                        else if (!::strcmp(attrib,"ushort2_norm"))
+                            vtype = VET_USHORT2_NORM;
+                        else if (!::strcmp(attrib,"ushort4_norm"))
+                            vtype = VET_USHORT4_NORM;
                         else if (!::strcmp(attrib,"colour_argb"))
                             vtype = VET_COLOUR_ARGB;
                         else if (!::strcmp(attrib,"colour_abgr"))
@@ -990,7 +1066,7 @@ namespace v1 {
             } 
 
             // calculate how many vertexes there actually are
-            int actualVertexCount = 0;
+            size_t actualVertexCount = 0;
             for (TiXmlElement * vertexElem = vbElem->FirstChildElement(); vertexElem != 0; vertexElem = vertexElem->NextSiblingElement())
             {
                     actualVertexCount++;
@@ -1233,6 +1309,78 @@ namespace v1 {
                             *pShort++ = static_cast<uint16>(65535.0f * StringConverter::parseReal(xmlElem->Attribute("x")));
                             break;
 
+                        case VET_SHORT2_SNORM:
+                            if( !xmlElem->Attribute( "v" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'v' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            elem.baseVertexPointerToElement( pVert, &pShort );
+                            *pShort++ = static_cast<uint16>( Bitwise::floatToSnorm16(
+                                StringConverter::parseReal( xmlElem->Attribute( "u" ) ) ) );
+                            *pShort++ = static_cast<uint16>( Bitwise::floatToSnorm16(
+                                StringConverter::parseReal( xmlElem->Attribute( "v" ) ) ) );
+                            break;
+
+                        case VET_SHORT4_SNORM:
+                            if( !xmlElem->Attribute( "v" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'v' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            if( !xmlElem->Attribute( "w" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'w' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            if( !xmlElem->Attribute( "x" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'x' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            elem.baseVertexPointerToElement( pVert, &pShort );
+                            *pShort++ = static_cast<uint16>( Bitwise::floatToSnorm16(
+                                StringConverter::parseReal( xmlElem->Attribute( "u" ) ) ) );
+                            *pShort++ = static_cast<uint16>( Bitwise::floatToSnorm16(
+                                StringConverter::parseReal( xmlElem->Attribute( "v" ) ) ) );
+                            *pShort++ = static_cast<uint16>( Bitwise::floatToSnorm16(
+                                StringConverter::parseReal( xmlElem->Attribute( "w" ) ) ) );
+                            *pShort++ = static_cast<uint16>( Bitwise::floatToSnorm16(
+                                StringConverter::parseReal( xmlElem->Attribute( "x" ) ) ) );
+                            break;
+
+                        case VET_USHORT2_NORM:
+                            if( !xmlElem->Attribute( "v" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'v' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            elem.baseVertexPointerToElement( pVert, &pShort );
+                            *pShort++ = static_cast<uint16>(
+                                65535.0f * StringConverter::parseReal( xmlElem->Attribute( "u" ) ) );
+                            *pShort++ = static_cast<uint16>(
+                                65535.0f * StringConverter::parseReal( xmlElem->Attribute( "v" ) ) );
+                            break;
+
+                        case VET_USHORT4_NORM:
+                            if( !xmlElem->Attribute( "v" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'v' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            if( !xmlElem->Attribute( "w" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'w' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            if( !xmlElem->Attribute( "x" ) )
+                                OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND,
+                                             "Texcoord 'x' attribute not found.",
+                                             "XMLMeshSerializer::readGeometry" );
+                            elem.baseVertexPointerToElement( pVert, &pShort );
+                            *pShort++ = static_cast<uint16>(
+                                65535.0f * StringConverter::parseReal( xmlElem->Attribute( "u" ) ) );
+                            *pShort++ = static_cast<uint16>(
+                                65535.0f * StringConverter::parseReal( xmlElem->Attribute( "v" ) ) );
+                            *pShort++ = static_cast<uint16>(
+                                65535.0f * StringConverter::parseReal( xmlElem->Attribute( "w" ) ) );
+                            *pShort++ = static_cast<uint16>(
+                                65535.0f * StringConverter::parseReal( xmlElem->Attribute( "x" ) ) );
+                            break;
+
                         case VET_UBYTE4:
                             if (!xmlElem->Attribute("v"))
                                 OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND, "Texcoord 'v' attribute not found.", "XMLMeshSerializer::readGeometry");
@@ -1312,9 +1460,9 @@ namespace v1 {
         elem != 0; elem = elem->NextSiblingElement())
         {
             VertexBoneAssignment vba;
-            vba.vertexIndex = StringConverter::parseInt(
+            vba.vertexIndex = StringConverter::parseUnsignedInt(
                 elem->Attribute("vertexindex"));
-            vba.boneIndex = StringConverter::parseInt(
+            vba.boneIndex = StringConverter::parseUnsignedShort(
                 elem->Attribute("boneindex"));
             vba.weight= StringConverter::parseReal(
                 elem->Attribute("weight"));
@@ -1354,7 +1502,7 @@ namespace v1 {
             elem != 0; elem = elem->NextSiblingElement())
         {
             String meshName = elem->Attribute("name");
-            int index = StringConverter::parseInt(elem->Attribute("index"));
+            unsigned index = StringConverter::parseUnsignedInt(elem->Attribute("index"));
 
             sm->nameSubMesh(meshName, index);
         }
@@ -1370,9 +1518,9 @@ namespace v1 {
         elem != 0; elem = elem->NextSiblingElement())
         {
             VertexBoneAssignment vba;
-            vba.vertexIndex = StringConverter::parseInt(
+            vba.vertexIndex = StringConverter::parseUnsignedInt(
                 elem->Attribute("vertexindex"));
-            vba.boneIndex = StringConverter::parseInt(
+            vba.boneIndex = StringConverter::parseUnsignedShort(
                 elem->Attribute("boneindex"));
             vba.weight= StringConverter::parseReal(
                 elem->Attribute("weight"));
@@ -1626,7 +1774,7 @@ namespace v1 {
         }
         const LodStrategy *lodStrategy = LodStrategyManager::getSingleton().getStrategy( mMesh->getLodStrategyName() );
         usage.value = lodStrategy->transformUserValue(usage.userValue);
-        usage.manualMesh.setNull();
+        usage.manualMesh.reset();
         usage.manualName = "";
         usage.edgeData = NULL;
 
@@ -1638,9 +1786,9 @@ namespace v1 {
         while (faceListElem)
         {
             val = faceListElem->Attribute("submeshindex");
-            unsigned short subidx = StringConverter::parseUnsignedInt(val);
+            unsigned subidx = StringConverter::parseUnsignedInt(val);
             val = faceListElem->Attribute("numfaces");
-            unsigned short numFaces = StringConverter::parseUnsignedInt(val);
+            unsigned numFaces = StringConverter::parseUnsignedInt(val);
             if (numFaces)
             {
                 // use of 32bit indexes depends on submesh
@@ -1671,11 +1819,11 @@ namespace v1 {
                     else
                     {
                         val = faceElem->Attribute("v1");
-                        *pShort++ = StringConverter::parseUnsignedInt(val);
+                        *pShort++ = StringConverter::parseUnsignedShort(val);
                         val = faceElem->Attribute("v2");
-                        *pShort++ = StringConverter::parseUnsignedInt(val);
+                        *pShort++ = StringConverter::parseUnsignedShort(val);
                         val = faceElem->Attribute("v3");
-                        *pShort++ = StringConverter::parseUnsignedInt(val);
+                        *pShort++ = StringConverter::parseUnsignedShort(val);
                     }
                 }
             }
@@ -1698,7 +1846,7 @@ namespace v1 {
         for (TiXmlElement* elem = extremesNode->FirstChildElement();
              elem != 0; elem = elem->NextSiblingElement())
         {
-            int index = StringConverter::parseInt(elem->Attribute("index"));
+            unsigned index = StringConverter::parseUnsignedInt(elem->Attribute("index"));
 
             SubMesh *sm = m->getSubMesh(index);
             sm->extremityPoints.clear ();
@@ -2010,7 +2158,7 @@ namespace v1 {
                         "Required attribute 'poseindex' missing on poseref", 
                         "XMLMeshSerializer::readPoseKeyFrames");
                 }
-                unsigned short poseIndex = StringConverter::parseUnsignedInt(attr);
+                unsigned short poseIndex = StringConverter::parseUnsignedShort(attr);
                 Real influence = 1.0f;
                 attr = poseRefNode->Attribute("influence");
                 if (attr)

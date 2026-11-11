@@ -96,7 +96,7 @@ namespace Ogre
             {
                 OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS,
                              "Cannot mix RenderWindow colour texture with depth or stencil buffer "
-                             "that aren't for RenderWindows, or viceversa",
+                             "that aren't for RenderWindows, or vice-versa",
                              "MetalRenderPassDescriptor::checkRenderWindowStatus" );
             }
         }
@@ -138,7 +138,9 @@ namespace Ogre
             return MTLLoadActionDontCare;
         case LoadAction::Clear:
             return MTLLoadActionClear;
-#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
+#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS || \
+    ( OGRE_PLATFORM == OGRE_PLATFORM_APPLE && OGRE_CPU == OGRE_CPU_ARM && \
+      OGRE_ARCH_TYPE == OGRE_ARCHITECTURE_64 )
         case LoadAction::ClearOnTilers:
             return MTLLoadActionClear;
 #else
@@ -616,7 +618,8 @@ namespace Ogre
                 LogManager::getSingleton().logMessage(
                     "Dumping callstack at the time rendering was interrupted: ", LML_CRITICAL );
 
-                char **translatedCS = backtrace_symbols( mCallstackBacktrace, mNumCallstackEntries );
+                char **translatedCS =
+                    backtrace_symbols( mCallstackBacktrace, (int)mNumCallstackEntries );
 
                 for( size_t i = 0; i < mNumCallstackEntries; ++i )
                     LogManager::getSingleton().logMessage( translatedCS[i], LML_CRITICAL );
@@ -723,4 +726,4 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     //-----------------------------------------------------------------------------------
     MetalFrameBufferDescValue::MetalFrameBufferDescValue() : refCount( 0 ) {}
-}
+}  // namespace Ogre

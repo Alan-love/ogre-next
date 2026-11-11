@@ -34,10 +34,28 @@ THE SOFTWARE.
 #include "OgreGpuProgram.h"
 #include "OgreLogManager.h"
 #include "OgreLwString.h"
-#include "OgreStringConverter.h"
 
-#include "rapidjson/document.h"
-#include "rapidjson/error/en.h"
+#if !OGRE_NO_JSON
+#    include "OgreStringConverter.h"
+#
+#    if defined( __GNUC__ ) && !defined( __clang__ )
+#        pragma GCC diagnostic push
+#        pragma GCC diagnostic ignored "-Wclass-memaccess"
+#    endif
+#    if defined( __clang__ )
+#        pragma clang diagnostic push
+#        pragma clang diagnostic ignored "-Wimplicit-int-float-conversion"
+#        pragma clang diagnostic ignored "-Wdeprecated-copy"
+#    endif
+#    include "rapidjson/document.h"
+#    include "rapidjson/error/en.h"
+#    if defined( __clang__ )
+#        pragma clang diagnostic pop
+#    endif
+#    if defined( __GNUC__ ) && !defined( __clang__ )
+#        pragma GCC diagnostic pop
+#    endif
+#endif
 
 #define TODO_limit_NUM_BIND_TEXTURES  // and co.
 
@@ -205,8 +223,9 @@ namespace Ogre
                     }
                 }
 
-                const bool texTypesInUse = mDescBindingRanges[i][DescBindingTypes::TexBuffer].isInUse() |
-                                           mDescBindingRanges[i][DescBindingTypes::Texture].isInUse();
+                const bool texTypesInUse =
+                    (int)mDescBindingRanges[i][DescBindingTypes::TexBuffer].isInUse() |
+                    (int)mDescBindingRanges[i][DescBindingTypes::Texture].isInUse();
                 if( texTypesInUse )
                 {
                     if( !bakedSetsSeenTexTypes )
@@ -238,8 +257,9 @@ namespace Ogre
                     }
                 }
 
-                const bool uavTypesInUse = mDescBindingRanges[i][DescBindingTypes::UavBuffer].isInUse() |
-                                           mDescBindingRanges[i][DescBindingTypes::UavTexture].isInUse();
+                const bool uavTypesInUse =
+                    (int)mDescBindingRanges[i][DescBindingTypes::UavBuffer].isInUse() |
+                    (int)mDescBindingRanges[i][DescBindingTypes::UavTexture].isInUse();
                 if( uavTypesInUse )
                 {
                     if( !bakedSetsSeenUavTypes )
@@ -274,8 +294,7 @@ namespace Ogre
                               " specifies ", c_rootLayoutVarNames[i], " in range [",
                               mDescBindingRanges[j][i].start );
                     tmpStr.a( ", ", (uint32)mDescBindingRanges[j][i].end, ") but set ",
-                              ( uint32 )( j + 1u ), " is in range [",
-                              mDescBindingRanges[j + 1][i].start );
+                              (uint32)( j + 1u ), " is in range [", mDescBindingRanges[j + 1][i].start );
                     tmpStr.a( ", ", mDescBindingRanges[j + 1][i].end, ")" );
 
                     OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS,
@@ -342,6 +361,7 @@ namespace Ogre
     void RootLayout::parseSet( const rapidjson::Value &jsonValue, const size_t setIdx,
                                const String &filename )
     {
+#if !OGRE_NO_JSON
         rapidjson::Value::ConstMemberIterator itor;
 
         itor = jsonValue.FindMember( "baked" );
@@ -365,8 +385,8 @@ namespace Ogre
                                      "RootLayout::parseSet" );
                     }
 
-                    const size_t numStages = itor->value.Size();
-                    for( size_t j = 0u; j < numStages; ++j )
+                    const rapidjson::SizeType numStages = itor->value.Size();
+                    for( rapidjson::SizeType j = 0u; j < numStages; ++j )
                     {
                         if( itor->value[j].IsString() )
                         {
@@ -434,6 +454,11 @@ namespace Ogre
                 }
             }
         }
+#else
+        OGRE_EXCEPT( Exception::ERR_INVALID_CALL,
+                     "Ogre must be built with JSON support to call this function!",
+                     "RootLayout::parseSet" );
+#endif
     }
     //-------------------------------------------------------------------------
     void RootLayout::addArrayBinding( DescBindingTypes::DescBindingTypes bindingType,
@@ -527,6 +552,7 @@ namespace Ogre
     void RootLayout::parseRootLayout( const char *rootLayout, const bool bCompute,
                                       const String &filename )
     {
+#if !OGRE_NO_JSON
         mCompute = bCompute;
         mParamsBuffStages = 0u;
 
@@ -575,8 +601,8 @@ namespace Ogre
                     itor = descArrays.FindMember( c_rootLayoutVarNames[i] );
                     if( itor != descArrays.MemberEnd() && itor->value.IsArray() )
                     {
-                        const size_t numArrays = itor->value.Size();
-                        for( size_t j = 0u; j < numArrays; ++j )
+                        const rapidjson::SizeType numArrays = itor->value.Size();
+                        for( rapidjson::SizeType j = 0u; j < numArrays; ++j )
                         {
                             if( itor->value[j].IsArray() && itor->value[j].Size() == 2u &&
                                 itor->value[j][0].IsUint() && itor->value[j][1].IsUint() )
@@ -607,6 +633,11 @@ namespace Ogre
             LogManager::getSingleton().logMessage( dumpStr, LML_CRITICAL );
             throw;
         }
+#else
+        OGRE_EXCEPT( Exception::ERR_INVALID_CALL,
+                     "Ogre must be built with JSON support to call this function!",
+                     "RootLayout::parseRootLayout" );
+#endif
     }
     //-----------------------------------------------------------------------------------
     inline void RootLayout::flushLwString( LwString &jsonStr, String &outJson )

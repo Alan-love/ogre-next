@@ -205,8 +205,9 @@ namespace Ogre
         for( size_t i = 0u; i < 6u; ++i )
             colourVal[i] = box.getColourAt( 0u, 0u, sliceIdx + i, pixelFormat );
 
-        const Vector3 probeAreaHalfSize( mOverlap * mFullRegion.mHalfSize /
-                                         Vector3( mNumProbes[0], mNumProbes[1], mNumProbes[2] ) );
+        const Vector3 probeAreaHalfSize(
+            mOverlap * mFullRegion.mHalfSize /
+            Vector3( (Real)mNumProbes[0], (Real)mNumProbes[1], (Real)mNumProbes[2] ) );
 
         const Vector3 probeShapeCenter = probe->getProbeShape().mCenter;
 
@@ -242,9 +243,9 @@ namespace Ogre
     //-------------------------------------------------------------------------
     Vector3 PccPerPixelGridPlacement::getProbeNormalizedCenter( size_t probeIdx ) const
     {
-        const uint32 xPos = probeIdx % mNumProbes[0];
-        const uint32 yPos = ( probeIdx / mNumProbes[0] ) % mNumProbes[1];
-        const uint32 zPos = static_cast<uint32>( probeIdx / ( mNumProbes[0] * mNumProbes[1] ) );
+        const float xPos = float( probeIdx % mNumProbes[0] );
+        const float yPos = float( ( probeIdx / mNumProbes[0] ) % mNumProbes[1] );
+        const float zPos = float( probeIdx / ( mNumProbes[0] * mNumProbes[1] ) );
 
         const Vector3 normalizedCenter( ( xPos + 0.5f ) / static_cast<float>( mNumProbes[0] ),
                                         ( yPos + 0.5f ) / static_cast<float>( mNumProbes[1] ),
@@ -263,8 +264,9 @@ namespace Ogre
         mPcc->setEnabled( true, resolution, resolution, maxNumProbes, pixelFormat );
         mPcc->setUpdatedTrackedDataFromCamera( camera );
 
-        const Vector3 probeAreaHalfSize( mOverlap * mFullRegion.mHalfSize /
-                                         Vector3( mNumProbes[0], mNumProbes[1], mNumProbes[2] ) );
+        const Vector3 probeAreaHalfSize(
+            mOverlap * mFullRegion.mHalfSize /
+            Vector3( (Real)mNumProbes[0], (Real)mNumProbes[1], (Real)mNumProbes[2] ) );
         const Vector3 regionOrigin( mFullRegion.getMinimum() );
 
         for( size_t i = 0u; i < maxNumProbes; ++i )
@@ -374,7 +376,6 @@ namespace Ogre
     void PccPerPixelGridPlacement::preCopyRenderTargetToCubemap( TextureGpu *renderTarget,
                                                                  uint32 cubemapArrayIdx )
     {
-
         TextureGpuManager *textureManager = renderTarget->getTextureManager();
 
         AsyncTextureTicket *asyncTicket = textureManager->createAsyncTextureTicket(

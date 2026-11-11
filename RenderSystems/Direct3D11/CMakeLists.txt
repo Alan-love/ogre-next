@@ -41,13 +41,9 @@ add_definitions(-D_USRDLL)
 
 ogre_add_library(RenderSystem_Direct3D11 ${OGRE_LIB_TYPE} ${HEADER_FILES} ${SOURCE_FILES})
 target_link_libraries(RenderSystem_Direct3D11
-  OgreMain
+  ${OGRE_NEXT}Main
   ${DirectX11_LIBRARIES}
 )
-
-if(OGRE_PROFILING AND DirectX9_FOUND)
-  target_link_libraries(RenderSystem_Direct3D11 ${DirectX9_LIBRARY})
-endif()
 
 if (NOT OGRE_STATIC)
   set_target_properties(RenderSystem_Direct3D11 PROPERTIES
@@ -65,4 +61,4 @@ if( OGRE_CONFIG_AMD_AGS )
 endif()
 
 ogre_config_plugin(RenderSystem_Direct3D11)
-install(FILES ${HEADER_FILES} DESTINATION include/OGRE/RenderSystems/Direct3D11)
+install(FILES ${HEADER_FILES} DESTINATION include/${OGRE_NEXT_PREFIX}/RenderSystems/Direct3D11)

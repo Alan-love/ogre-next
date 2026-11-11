@@ -26,13 +26,19 @@ THE SOFTWARE.
 -----------------------------------------------------------------------------
 */
 
+#ifndef _OgreMacUtils_H_
+#define _OgreMacUtils_H_
+
 #include <CoreFoundation/CoreFoundation.h>
 #include "OgrePrerequisites.h"
 
-namespace Ogre {
-    void* mac_loadDylib(const char* name);
-    _OgreExport String macCachePath();
+namespace Ogre
+{
+    void              *mac_loadDylib( const char *name );
+    _OgreExport String macCachePath( bool bAutoCreate = true );
     _OgreExport String macBundlePath();
     _OgreExport String macTempFileName();
     _OgreExport String iOSDocumentsDirectory();
-}
+}  // namespace Ogre
+
+#endif

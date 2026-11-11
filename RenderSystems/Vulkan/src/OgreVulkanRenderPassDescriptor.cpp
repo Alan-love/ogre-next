@@ -66,6 +66,14 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     VulkanRenderPassDescriptor::~VulkanRenderPassDescriptor() { releaseFbo(); }
     //-----------------------------------------------------------------------------------
+    void VulkanRenderPassDescriptor::notifyDeviceLost() { releaseFbo(); }
+    //-----------------------------------------------------------------------------------
+    void VulkanRenderPassDescriptor::notifyDeviceRestored( unsigned pass )
+    {
+        if( pass == 1 )
+            entriesModified( RenderPassDescriptor::All );
+    }
+    //-----------------------------------------------------------------------------------
     void VulkanRenderPassDescriptor::checkRenderWindowStatus()
     {
         if( ( mNumColourEntries > 0 && mColour[0].texture->isRenderWindowSpecific() ) ||
@@ -85,7 +93,7 @@ namespace Ogre
             {
                 OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS,
                              "Cannot mix RenderWindow colour texture with depth or stencil buffer "
-                             "that aren't for RenderWindows, or viceversa",
+                             "that aren't for RenderWindows, or vice-versa",
                              "VulkanRenderPassDescriptor::checkRenderWindowStatus" );
             }
         }
@@ -316,21 +324,21 @@ namespace Ogre
         attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         if( !bResolveTex )
         {
+            attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
             if( texture->isRenderWindowSpecific() && !texture->isMultisample() &&
                 mReadyWindowForPresent )
             {
-                attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             }
             else
             {
-                attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             }
         }
         else
         {
-            attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             if( texture->isRenderWindowSpecific() && mReadyWindowForPresent )
                 attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             else
@@ -389,6 +397,7 @@ namespace Ogre
             mDepth.texture->getSampleDescription().getColourSamples() );
         attachment.loadOp = get( mDepth.loadAction );
         attachment.storeOp = get( mDepth.storeAction, false );
+
         if( mStencil.texture )
         {
             attachment.stencilLoadOp = get( mStencil.loadAction );
@@ -421,7 +430,49 @@ namespace Ogre
     void VulkanRenderPassDescriptor::setupFbo( VulkanFrameBufferDescValue &fboDesc )
     {
         if( fboDesc.mRenderPass )
-            return;  // Already initialized
+        {
+            // Already initialized. Only set clear values and early return
+            uint32 attachmentIdx = 0u;
+            for( size_t i = 0; i < mNumColourEntries; ++i )
+            {
+                if( mColour[i].texture->getPixelFormat() == PFG_NULL )
+                    continue;
+
+                mClearValues[attachmentIdx].color =
+                    getClearColour( mColour[i].clearColour, mColour[i].texture->getPixelFormat() );
+                ++attachmentIdx;
+
+                const RenderPassColourTarget &colour = mColour[i];
+                if( !( !colour.texture->getSampleDescription().isMultisample() ||
+                       !colour.resolveTexture ||
+                       ( colour.storeAction != StoreAction::MultisampleResolve &&
+                         colour.storeAction != StoreAction::StoreAndMultisampleResolve ) ) )
+                {
+                    // There is a resolve attachment. Theoretically we shouldn't need
+                    // to set a clear colour here, but we do it just in case.
+                    mClearValues[attachmentIdx].color = mClearValues[attachmentIdx - 1u].color;
+                    ++attachmentIdx;
+                }
+            }
+
+            if( mDepth.texture )
+            {
+                if( !mRenderSystem->isReverseDepth() )
+                {
+                    mClearValues[attachmentIdx].depthStencil.depth =
+                        static_cast<float>( mDepth.clearDepth );
+                }
+                else
+                {
+                    mClearValues[attachmentIdx].depthStencil.depth =
+                        static_cast<float>( Real( 1.0 ) - mDepth.clearDepth );
+                }
+                mClearValues[attachmentIdx].depthStencil.stencil = mStencil.clearStencil;
+                ++attachmentIdx;
+            }
+
+            return;  // We're done
+        }
 
         if( mDepth.texture && mDepth.texture->getResidencyStatus() != GpuResidency::Resident )
         {
@@ -553,7 +604,7 @@ namespace Ogre
         renderPassCreateInfo.pSubpasses = &subpass;
         VkResult result =
             vkCreateRenderPass( mQueue->mDevice, &renderPassCreateInfo, 0, &fboDesc.mRenderPass );
-        checkVkResult( result, "vkCreateRenderPass" );
+        checkVkResult( mQueue->mOwnerDevice, result, "vkCreateRenderPass" );
 
         VkFramebufferCreateInfo fbCreateInfo;
         makeVkStruct( fbCreateInfo, VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO );
@@ -571,7 +622,7 @@ namespace Ogre
             if( !fboDesc.mWindowImageViews.empty() )
                 fboDesc.mImageViews[windowAttachmentIdx] = fboDesc.mWindowImageViews[i];
             result = vkCreateFramebuffer( mQueue->mDevice, &fbCreateInfo, 0, &fboDesc.mFramebuffers[i] );
-            checkVkResult( result, "vkCreateFramebuffer" );
+            checkVkResult( mQueue->mOwnerDevice, result, "vkCreateFramebuffer" );
             if( !fboDesc.mWindowImageViews.empty() )
                 fboDesc.mImageViews[windowAttachmentIdx] = 0;
         }
@@ -642,8 +693,11 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     void VulkanRenderPassDescriptor::notifySwapchainCreated( VulkanWindow *window )
     {
-        if( mNumColourEntries > 0 && mColour[0].texture->isRenderWindowSpecific() &&
-            mColour[0].texture == window->getTexture() )
+        if( mNumColourEntries > 0 &&
+            ( ( mColour[0].texture && mColour[0].texture->isRenderWindowSpecific() &&
+                mColour[0].texture == window->getTexture() ) ||
+              ( mColour[0].resolveTexture && mColour[0].resolveTexture->isRenderWindowSpecific() &&
+                mColour[0].resolveTexture == window->getTexture() ) ) )
         {
             entriesModified( RenderPassDescriptor::All );
         }
@@ -651,8 +705,11 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     void VulkanRenderPassDescriptor::notifySwapchainDestroyed( VulkanWindow *window )
     {
-        if( mNumColourEntries > 0 && mColour[0].texture->isRenderWindowSpecific() &&
-            mColour[0].texture == window->getTexture() )
+        if( mNumColourEntries > 0 &&
+            ( ( mColour[0].texture && mColour[0].texture->isRenderWindowSpecific() &&
+                mColour[0].texture == window->getTexture() ) ||
+              ( mColour[0].resolveTexture && mColour[0].resolveTexture->isRenderWindowSpecific() &&
+                mColour[0].resolveTexture == window->getTexture() ) ) )
         {
             releaseFbo();
         }
@@ -846,8 +903,9 @@ namespace Ogre
         if( mInformationOnly )
             return;
 
-        VkCommandBuffer cmdBuffer = mQueue->mCurrentCmdBuffer;
+        VkCommandBuffer cmdBuffer = mQueue->getCurrentCmdBuffer();
 
+        OGRE_ASSERT_LOW( mSharedFboItor != mRenderSystem->_getFrameBufferDescMap().end() );
         const VulkanFrameBufferDescValue &fboDesc = mSharedFboItor->second;
 
         size_t fboIdx = 0u;
@@ -888,7 +946,7 @@ namespace Ogre
         passBeginInfo.renderArea.offset.y = 0;
         passBeginInfo.renderArea.extent.width = mTargetWidth;
         passBeginInfo.renderArea.extent.height = mTargetHeight;
-        passBeginInfo.clearValueCount = sizeof( mClearValues ) / sizeof( mClearValues[0] );
+        passBeginInfo.clearValueCount = fboDesc.mNumImageViews;
         passBeginInfo.pClearValues = mClearValues;
 
         if( renderingWasInterrupted )
@@ -909,7 +967,7 @@ namespace Ogre
         if( mQueue->getEncoderState() != VulkanQueue::EncoderGraphicsOpen )
             return;
 
-        vkCmdEndRenderPass( mQueue->mCurrentCmdBuffer );
+        vkCmdEndRenderPass( mQueue->getCurrentCmdBuffer() );
 
         if( isInterruptingRendering )
         {
@@ -919,11 +977,36 @@ namespace Ogre
             static bool warnedOnce = false;
             if( !warnedOnce || cannotInterrupt )
             {
-                mNumCallstackEntries = backtrace( mCallstackBacktrace, 32 );
+                mNumCallstackEntries = static_cast<size_t>( backtrace( mCallstackBacktrace, 32 ) );
                 warnedOnce = true;
             }
 #endif
             return;
+        }
+
+        if( mReadyWindowForPresent )
+        {
+            const size_t numColourEntries = mNumColourEntries;
+            for( size_t i = 0u; i < numColourEntries; ++i )
+            {
+                VulkanTextureGpu *texture;
+
+                if( mColour[i].resolveTexture && mColour[i].resolveTexture->isRenderWindowSpecific() )
+                {
+                    OGRE_ASSERT_HIGH( dynamic_cast<VulkanTextureGpu *>( mColour[i].resolveTexture ) );
+                    texture = static_cast<VulkanTextureGpu *>( mColour[i].resolveTexture );
+                    texture->mCurrLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                    texture->mNextLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                }
+
+                if( mColour[i].texture && mColour[i].texture->isRenderWindowSpecific() )
+                {
+                    OGRE_ASSERT_HIGH( dynamic_cast<VulkanTextureGpu *>( mColour[i].texture ) );
+                    texture = static_cast<VulkanTextureGpu *>( mColour[i].texture );
+                    texture->mCurrLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                    texture->mNextLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                }
+            }
         }
 
         // End (if exists) the render command encoder tied to this RenderPassDesc.

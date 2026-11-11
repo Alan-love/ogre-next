@@ -26,36 +26,35 @@ THE SOFTWARE.
 -----------------------------------------------------------------------------
 */
 #include "OgreStableHeaders.h"
+
 #include "OgreSubItem.h"
 
+#include "OgreException.h"
+#include "OgreHlmsDatablock.h"
 #include "OgreItem.h"
+#include "OgreLogManager.h"
 #include "OgreMaterialManager.h"
 #include "OgreSubMesh2.h"
-#include "OgreLogManager.h"
-#include "OgreHlmsDatablock.h"
-#include "OgreException.h"
 
-namespace Ogre {
+namespace Ogre
+{
     //-----------------------------------------------------------------------
-    SubItem::SubItem( Item* parent, SubMesh* subMeshBasis ) :
+    SubItem::SubItem( Item *parent, SubMesh *subMeshBasis ) :
         RenderableAnimated(),
         mParentItem( parent ),
         mSubMesh( subMeshBasis )
     {
-        //mMaterialPtr = MaterialManager::getSingleton().getByName(mMaterialName, subMeshBasis->parent->getGroup());
+        // mMaterialPtr = MaterialManager::getSingleton().getByName(mMaterialName,
+        // subMeshBasis->parent->getGroup());
         mMaterialLodIndex = 0;
         mVaoPerLod[VpNormal] = subMeshBasis->mVao[VpNormal];
         mVaoPerLod[VpShadow] = subMeshBasis->mVao[VpShadow];
 
-        if( !subMeshBasis->mBlendIndexToBoneIndexMap.empty() )
+        setupSkeleton();
+
+        if( subMeshBasis->getNumPoses() > 0 )
         {
-            mHasSkeletonAnimation = true;
-            mBlendIndexToBoneIndexMap = &subMeshBasis->mBlendIndexToBoneIndexMap;
-        }
-        
-        if( subMeshBasis->getNumPoses() > 0 ) 
-        {
-            mPoseData.reset(new PoseData);
+            mPoseData.reset( new PoseData );
             mPoseData->numPoses = subMeshBasis->getNumPoses();
             mPoseData->buffer = subMeshBasis->getPoseTexBuffer();
             mPoseData->halfPrecision = subMeshBasis->getPoseHalfPrecision();
@@ -63,14 +62,18 @@ namespace Ogre {
         }
     }
     //-----------------------------------------------------------------------
-    SubItem::~SubItem()
+    SubItem::~SubItem() {}
+    //-----------------------------------------------------------------------
+    void SubItem::setupSkeleton()
     {
+        if( !mSubMesh->mBlendIndexToBoneIndexMap.empty() )
+        {
+            mHasSkeletonAnimation = true;
+            mBlendIndexToBoneIndexMap = &mSubMesh->mBlendIndexToBoneIndexMap;
+        }
     }
     //-----------------------------------------------------------------------
-    SubMesh* SubItem::getSubMesh() const
-    {
-        return mSubMesh;
-    }
+    SubMesh *SubItem::getSubMesh() const { return mSubMesh; }
     //-----------------------------------------------------------------------------
     void SubItem::_setHlmsHashes( uint32 hash, uint32 casterHash )
     {
@@ -78,7 +81,7 @@ namespace Ogre {
         {
             if( mVaoPerLod[VpShadow].empty() || mVaoPerLod[VpShadow][0] != mSubMesh->mVao[VpNormal][0] )
             {
-                //Has alpha testing. Disable the optimized shadow mapping buffers.
+                // Has alpha testing. Disable the optimized shadow mapping buffers.
                 mVaoPerLod[VpShadow] = mSubMesh->mVao[VpNormal];
             }
         }
@@ -86,7 +89,7 @@ namespace Ogre {
         {
             if( mVaoPerLod[VpShadow].empty() || mVaoPerLod[VpShadow][0] != mSubMesh->mVao[VpShadow][0] )
             {
-                //Restore the optimized shadow mapping buffers.
+                // Restore the optimized shadow mapping buffers.
                 mVaoPerLod[VpShadow] = mSubMesh->mVao[VpShadow];
             }
         }
@@ -94,12 +97,9 @@ namespace Ogre {
         Renderable::_setHlmsHashes( hash, casterHash );
     }
     //-----------------------------------------------------------------------
-    const LightList& SubItem::getLights() const
-    {
-        return mParentItem->queryLights();
-    }
+    const LightList &SubItem::getLights() const { return mParentItem->queryLights(); }
     //-----------------------------------------------------------------------------
-    void SubItem::getRenderOperation( v1::RenderOperation& op, bool casterPass )
+    void SubItem::getRenderOperation( v1::RenderOperation &op, bool casterPass )
     {
         OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED,
                      "Items do not implement getRenderOperation. You've put an Item in "
@@ -108,7 +108,7 @@ namespace Ogre {
                      "SubItem::getRenderOperation" );
     }
     //-----------------------------------------------------------------------------
-    void SubItem::getWorldTransforms(Matrix4* xform) const
+    void SubItem::getWorldTransforms( Matrix4 *xform ) const
     {
         OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED,
                      "Items do not implement getWorldTransforms. You've put an Item in "
@@ -126,18 +126,18 @@ namespace Ogre {
                      "SubItem::getCastsShadows" );
     }
     //-----------------------------------------------------------------------------------
-    float SubItem::getPoseWeight( const Ogre::String& poseName ) const
+    float SubItem::getPoseWeight( const Ogre::String &poseName ) const
     {
-        return Renderable::getPoseWeight( mSubMesh->getPoseIndex(poseName) );
+        return Renderable::getPoseWeight( mSubMesh->getPoseIndex( poseName ) );
     }
     //-----------------------------------------------------------------------------------
-    void SubItem::setPoseWeight( const Ogre::String& poseName, float w )
+    void SubItem::setPoseWeight( const Ogre::String &poseName, float w )
     {
-        Renderable::setPoseWeight( mSubMesh->getPoseIndex(poseName), w );
+        Renderable::setPoseWeight( mSubMesh->getPoseIndex( poseName ), w );
     }
     //-----------------------------------------------------------------------------------
-    void SubItem::addPoseWeight( const Ogre::String& poseName, float w )
+    void SubItem::addPoseWeight( const Ogre::String &poseName, float w )
     {
-        Renderable::addPoseWeight( mSubMesh->getPoseIndex(poseName), w );
+        Renderable::addPoseWeight( mSubMesh->getPoseIndex( poseName ), w );
     }
-}
+}  // namespace Ogre

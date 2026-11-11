@@ -198,7 +198,7 @@ namespace Ogre
     {
         assert( mUploadOnly );
 
-        mMappingCount = alignToNextMultiple( sizeBytes, 4u );
+        mMappingCount = alignToNextMultiple<size_t>( sizeBytes, 4u );
 
         waitIfNeeded();  // Will fill mMappingStart
 
@@ -212,10 +212,10 @@ namespace Ogre
     {
         //        if( mUploadOnly )
         //        {
-        //#if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
+        // #if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
         //            NSRange range = NSMakeRange( mInternalBufferStart + mMappingStart, mMappingCount );
         //            [mVboName didModifyRange:range];
-        //#endif
+        // #endif
         //        }
 
         mMappedPtr = 0;
@@ -237,7 +237,7 @@ namespace Ogre
                            sourceOffset:mInternalBufferStart + mMappingStart + dst.srcOffset
                                toBuffer:bufferInterface->getVboName()
                       destinationOffset:dstOffset
-                                   size:alignToNextMultiple( dst.length, 4u )];
+                                   size:alignToNextMultiple<size_t>( dst.length, 4u )];
         }
 
         if( mUploadOnly )
@@ -334,10 +334,10 @@ namespace Ogre
 
         //        if( mUploadOnly )
         //        {
-        //#if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
+        // #if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
         //            NSRange range = NSMakeRange( mInternalBufferStart + mMappingStart, mMappingCount );
         //            [mVboName didModifyRange:range];
-        //#endif
+        // #endif
         //        }
 
         mMappedPtr = 0;
@@ -347,7 +347,7 @@ namespace Ogre
                        sourceOffset:mInternalBufferStart + mMappingStart
                            toBuffer:hwBuffer->getBufferNameForGpuWrite()
                   destinationOffset:lockStart
-                               size:alignToNextMultiple( lockSize, 4u )];
+                               size:alignToNextMultiple<size_t>( lockSize, 4u )];
 
         if( mUploadOnly )
         {
@@ -378,10 +378,10 @@ namespace Ogre
         // to the return value so it gets correctly mapped in _mapForRead.
         size_t extraOffset = srcOffset & 0x03;
         srcOffset -= extraOffset;
-        size_t srcLengthPadded = alignToNextMultiple( extraOffset + srcLength, 4u );
+        size_t srcLengthPadded = alignToNextMultiple<size_t>( extraOffset + srcLength, 4u );
         size_t freeRegionOffset = getFreeDownloadRegion( srcLengthPadded );
 
-        if( freeRegionOffset == ( size_t )( -1 ) )
+        if( freeRegionOffset == (size_t)( -1 ) )
         {
             OGRE_EXCEPT(
                 Exception::ERR_INVALIDPARAMS,
@@ -411,7 +411,7 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     bool MetalStagingBuffer::canDownload( size_t length ) const
     {
-        return StagingBuffer::canDownload( alignToNextMultiple( length, 4u ) );
+        return StagingBuffer::canDownload( alignToNextMultiple<size_t>( length, 4u ) );
     }
     //-----------------------------------------------------------------------------------
     void MetalStagingBuffer::_cancelDownload( size_t offset, size_t sizeBytes )
@@ -419,7 +419,8 @@ namespace Ogre
         // If offset isn't multiple of 4, we were making it go forward in
         //_asyncDownload. We need to backtrack it so regions stay contiguous.
         size_t delta = offset & 0x03;
-        StagingBuffer::_cancelDownload( offset - delta, alignToNextMultiple( delta + sizeBytes, 4u ) );
+        StagingBuffer::_cancelDownload( offset - delta,
+                                        alignToNextMultiple<size_t>( delta + sizeBytes, 4u ) );
     }
     //-----------------------------------------------------------------------------------
     const void *MetalStagingBuffer::_mapForReadImpl( size_t offset, size_t sizeBytes )
@@ -427,7 +428,7 @@ namespace Ogre
         assert( !mUploadOnly );
 
         mMappingStart = offset;
-        mMappingCount = alignToNextMultiple( sizeBytes, 4u );
+        mMappingCount = alignToNextMultiple<size_t>( sizeBytes, 4u );
 
         mMappedPtr =
             reinterpret_cast<uint8 *>( [mVboName contents] ) + mInternalBufferStart + mMappingStart;
@@ -449,10 +450,10 @@ namespace Ogre
         // to the return value so it gets correctly mapped in _mapForRead.
         size_t extraOffset = srcOffset & 0x03;
         srcOffset -= extraOffset;
-        size_t srcLengthPadded = alignToNextMultiple( extraOffset + srcLength, 4u );
+        size_t srcLengthPadded = alignToNextMultiple<size_t>( extraOffset + srcLength, 4u );
         size_t freeRegionOffset = getFreeDownloadRegion( srcLengthPadded );
 
-        if( freeRegionOffset == ( size_t )( -1 ) )
+        if( freeRegionOffset == (size_t)( -1 ) )
         {
             OGRE_EXCEPT(
                 Exception::ERR_INVALIDPARAMS,
@@ -478,4 +479,4 @@ namespace Ogre
 
         return freeRegionOffset + extraOffset;
     }
-}
+}  // namespace Ogre

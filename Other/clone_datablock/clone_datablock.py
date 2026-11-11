@@ -3,13 +3,14 @@
 
 import argparse
 import clang.cindex
-import io;
-import os;
+import io
+import os
 import sys
-#import hashlib
+# import hashlib
 
 if not sys.platform.startswith("win32"):
     from ctypes.util import find_library
+
 
 def setup_clang(library):
     if library == None:
@@ -17,8 +18,8 @@ def setup_clang(library):
         if sys.platform.startswith("win32"):
             clang.cindex.Config.set_library_path("C:/Program Files/LLVM/bin")
         else:
-            clang.cindex.Config.set_library_file( find_library('clang-4.0') )
-            #clang.cindex.Config.set_library_path("/usr/lib")
+            clang.cindex.Config.set_library_file(find_library('clang-18'))
+            # clang.cindex.Config.set_library_path("/usr/lib")
     else:
         clang.cindex.Config.set_library_file(library)
 
@@ -42,15 +43,16 @@ def parse_classdecl(cursor, classname, classmembers, baseclassname):
                 elif children.kind == clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
                     base_class = children.get_definition()
                     for base_children in base_class.get_children():
-                        if base_children.displayname == "cloneImpl(Ogre::HlmsDatablock *)":
-                            baseclassname.append( base_class.spelling )
+                        if base_children.displayname == "cloneImpl(Ogre::HlmsDatablock *)" \
+                                or base_children.displayname == "cloneImpl(HlmsDatablock *)":
+                            baseclassname.append(base_class.spelling)
                             break
             except ValueError:
                 pass
 
 
 def parse_fielddecl(cursor, classname, classmembers):
-    cursortype = cursor.type;
+    cursortype = cursor.type
     if cursortype.kind == clang.cindex.TypeKind.TYPEDEF:
         cursortype = cursortype.get_canonical()
 
@@ -63,7 +65,8 @@ def parse_fielddecl(cursor, classname, classmembers):
         if cursortype.element_type.kind == clang.cindex.TypeKind.CONSTANTARRAY:
             # Bidimensional C-style array
             # @todo Add support for multidimensional C-style array
-            size = (cursortype.element_count, cursortype.element_type.element_count)
+            size = (cursortype.element_count,
+                    cursortype.element_type.element_count)
         else:
             # C-style array
             size = (cursortype.element_count, )
@@ -71,38 +74,45 @@ def parse_fielddecl(cursor, classname, classmembers):
     classmembers.append((cursor.spelling, size))
 
 
+def writeFileIfChanged(newFile, fullPath):
+    try:
+        oldFile = io.open(fullPath, 'r', encoding='utf-8', newline="\n")
+    except IOError:
+        oldFile = None
+
+    newFile.seek(0, io.SEEK_SET)
+
+    oldData = oldFile.read() if oldFile else ''
+    newData = newFile.read()
+
+    # Raw compare.
+    if oldData != newData:
+        if oldFile:
+            oldFile.seek(0, io.SEEK_SET)
+        newFile.seek(0, io.SEEK_SET)
+        print("File " + fullPath + " is outdated. Overwriting...")
+        if oldFile:
+            oldFile.close()
+        oldFile = io.open(fullPath, 'w', encoding='utf-8', newline="\n")
+        oldFile.write(newFile.read())
+        oldFile.close()
+    else:
+        print("File " + fullPath + " is up to date.")
+    newFile.close()
+    return
+
+
 def dump_cpp(dirname, basename, classname, classmembers, baseclassname):
     fullPath = dirname + "/" + basename
-    #file = io.open(fullPath, "w", encoding = "utf-8", newline = "\n")
     newFile = io.StringIO(newline = "\n")
 
     dump_cpp_disclaimer( newFile )
     dump_cpp_license( newFile )
+    
     dump_cpp_implementation( newFile, classname, classmembers, baseclassname )
 
-    newFile.seek( 0, io.SEEK_SET )
-    try:
-        oldFile = io.open( fullPath, 'r', encoding='utf-8', newline = "\n" )
-    except IOError:
-        oldFile = None
-
-    # Hash code removed since it's useless (why compare if we need to hash both?). Just raw compare.
-    #oldHash = hashlib.md5( oldFile.read() ).hexdigest()
-    #newHash = hashlib.md5( newFile.read() ).hexdigest()
-    if not oldFile or oldFile.read() != newFile.read():
-        if oldFile: oldFile.seek( 0, io.SEEK_SET )
-        newFile.seek( 0, io.SEEK_SET )
-        #print( "File " + fullPath + " is outdated " + str( oldHash ) + " (old) vs " + str( newHash ) + " (new). Overwriting..." )
-        print( "File " + fullPath + " is outdated. Overwriting..." )
-        if oldFile: oldFile.close()
-        oldFile = io.open( fullPath, 'w', encoding='utf-8', newline = "\n" )
-        oldFile.write( newFile.read() )
-        oldFile.close()
-    else:
-        #print( "File " + fullPath + " is up to date (" + str( oldHash ) + ")" )
-        print( "File " + fullPath + " is up to date." )
-    newFile.close()
-
+    writeFileIfChanged(newFile, fullPath)
+    
 
 def dump_cpp_disclaimer(file):
     file.write(

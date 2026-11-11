@@ -62,6 +62,9 @@ namespace Ogre
 
         deleteFences( mFences.begin(), mFences.end() );
 
+        // Staging Buffers are already delayed (see mZeroRefStagingBuffers) so they can
+        // be deallocated immediately.
+        // BT_DYNAMIC_DEFAULT already signals this information so no extra info is required.
         VulkanVaoManager *vaoManager = static_cast<VulkanVaoManager *>( mVaoManager );
         vaoManager->deallocateVbo( mVboPoolIdx, mInternalBufferStart, getMaxSize(), BT_DYNAMIC_DEFAULT,
                                    !mUploadOnly, true );
@@ -143,7 +146,7 @@ namespace Ogre
 
         VkResult result = vkWaitForFences( device->mDevice, 1, &syncObj, VK_TRUE,
                                            UINT64_MAX );  // You can't wait forever in Vulkan?!?
-        checkVkResult( result, "VulkanStagingBuffer::wait" );
+        checkVkResult( device, result, "VulkanStagingBuffer::wait" );
     }
     //-----------------------------------------------------------------------------------
     void VulkanStagingBuffer::waitIfNeeded()
@@ -195,6 +198,11 @@ namespace Ogre
     {
         assert( mUploadOnly );
 
+#ifdef OGRE_VK_WORKAROUND_PVR_ALIGNMENT
+        if( Workarounds::mPowerVRAlignment )
+            sizeBytes = alignToNextMultiple<size_t>( sizeBytes, Workarounds::mPowerVRAlignment );
+#endif
+
         mMappingCount = sizeBytes;
 
         OGRE_ASSERT_MEDIUM( mUnmapTicket == std::numeric_limits<size_t>::max() &&
@@ -213,7 +221,7 @@ namespace Ogre
         VulkanVaoManager *vaoManager = static_cast<VulkanVaoManager *>( mVaoManager );
         VulkanDevice *device = vaoManager->getDevice();
 
-        VkCommandBuffer cmdBuffer = device->mGraphicsQueue.mCurrentCmdBuffer;
+        VkCommandBuffer cmdBuffer = device->mGraphicsQueue.getCurrentCmdBuffer();
 
         OGRE_ASSERT_MEDIUM( mUnmapTicket != std::numeric_limits<size_t>::max() &&
                             "VulkanStagingBuffer already unmapped!" );
@@ -242,6 +250,12 @@ namespace Ogre
             region.srcOffset = mInternalBufferStart + mMappingStart + dst.srcOffset;
             region.dstOffset = dstOffset;
             region.size = dst.length;
+#ifdef OGRE_VK_WORKAROUND_PVR_ALIGNMENT
+            OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                              ( region.srcOffset % Workarounds::mPowerVRAlignment ) == 0u );
+            OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                              ( region.dstOffset % Workarounds::mPowerVRAlignment ) == 0u );
+#endif
             vkCmdCopyBuffer( cmdBuffer, mVboName, bufferInterface->getVboName(), 1u, &region );
         }
 
@@ -266,9 +280,8 @@ namespace Ogre
                                                 size_t srcLength )
     {
         size_t freeRegionOffset = getFreeDownloadRegion( srcLength );
-        size_t errorCode = (size_t)-1;
 
-        if( freeRegionOffset == errorCode )
+        if( freeRegionOffset == std::numeric_limits<size_t>::max() )
         {
             OGRE_EXCEPT(
                 Exception::ERR_INVALIDPARAMS,
@@ -294,7 +307,13 @@ namespace Ogre
         region.srcOffset = source->_getFinalBufferStart() * source->getBytesPerElement() + srcOffset;
         region.dstOffset = mInternalBufferStart + freeRegionOffset;
         region.size = srcLength;
-        vkCmdCopyBuffer( device->mGraphicsQueue.mCurrentCmdBuffer, bufferInterface->getVboName(),
+#ifdef OGRE_VK_WORKAROUND_PVR_ALIGNMENT
+        OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                          ( region.srcOffset % Workarounds::mPowerVRAlignment ) == 0u );
+        OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                          ( region.dstOffset % Workarounds::mPowerVRAlignment ) == 0u );
+#endif
+        vkCmdCopyBuffer( device->mGraphicsQueue.getCurrentCmdBuffer(), bufferInterface->getVboName(),
                          mVboName, 1u, &region );
 
         return freeRegionOffset;
@@ -328,8 +347,15 @@ namespace Ogre
         VkBufferCopy region;
         region.srcOffset = mInternalBufferStart + mMappingStart;
         region.dstOffset = lockStart + dstOffsetStart;
-        region.size = alignToNextMultiple( lockSize, 4u );
-        vkCmdCopyBuffer( device->mGraphicsQueue.mCurrentCmdBuffer, mVboName, dstBuffer, 1u, &region );
+        region.size = alignToNextMultiple<size_t>( lockSize, 4u );
+#ifdef OGRE_VK_WORKAROUND_PVR_ALIGNMENT
+        OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                          ( region.srcOffset % Workarounds::mPowerVRAlignment ) == 0u );
+        OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                          ( region.dstOffset % Workarounds::mPowerVRAlignment ) == 0u );
+#endif
+        vkCmdCopyBuffer( device->mGraphicsQueue.getCurrentCmdBuffer(), mVboName, dstBuffer, 1u,
+                         &region );
 
         if( mUploadOnly )
         {
@@ -351,7 +377,7 @@ namespace Ogre
         // Vulkan has alignment restrictions of 4 bytes for offset and size in copyFromBuffer
         size_t freeRegionOffset = getFreeDownloadRegion( srcLength );
 
-        if( freeRegionOffset == ( size_t )( -1 ) )
+        if( freeRegionOffset == (size_t)( -1 ) )
         {
             OGRE_EXCEPT(
                 Exception::ERR_INVALIDPARAMS,
@@ -385,8 +411,15 @@ namespace Ogre
         VkBufferCopy region;
         region.srcOffset = srcOffset + srcOffsetStart;
         region.dstOffset = mInternalBufferStart + freeRegionOffset;
-        region.size = alignToNextMultiple( srcLength, 4u );
-        vkCmdCopyBuffer( device->mGraphicsQueue.mCurrentCmdBuffer, srcBuffer, mVboName, 1u, &region );
+        region.size = alignToNextMultiple<size_t>( srcLength, 4u );
+#ifdef OGRE_VK_WORKAROUND_PVR_ALIGNMENT
+        OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                          ( region.srcOffset % Workarounds::mPowerVRAlignment ) == 0u );
+        OGRE_ASSERT_HIGH( !Workarounds::mPowerVRAlignment ||
+                          ( region.dstOffset % Workarounds::mPowerVRAlignment ) == 0u );
+#endif
+        vkCmdCopyBuffer( device->mGraphicsQueue.getCurrentCmdBuffer(), srcBuffer, mVboName, 1u,
+                         &region );
 
         return freeRegionOffset + extraOffset;
     }

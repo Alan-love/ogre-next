@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "OgreMetalTextureGpuWindow.h"
 #include "OgrePixelFormatGpuUtils.h"
 #include "OgreRenderSystem.h"
+#include "OgreRoot.h"
 #include "OgreStringConverter.h"
 #include "OgreViewport.h"
 #include "OgreWindowEventUtilities.h"
@@ -49,7 +50,8 @@ THE SOFTWARE.
 
 @implementation MetalWinListener
 
-- (Ogre::MetalWindow *)getMetalWindow:(NSNotification *)notification {
+- (Ogre::MetalWindow *)getMetalWindow:(NSNotification *)notification
+{
     Ogre::MetalWindow *metalWindow = nullptr;
     NSWindow *cocoaWindow = notification.object;
     NSValue *assoc = objc_getAssociatedObject( cocoaWindow, @selector( windowClosed: ) );
@@ -60,7 +62,8 @@ THE SOFTWARE.
     return metalWindow;
 }
 
-- (void)windowMoved:(NSNotification *)notification {
+- (void)windowMoved:(NSNotification *)notification
+{
     Ogre::MetalWindow *metalWindow = [self getMetalWindow:notification];
     if( metalWindow != nil )
     {
@@ -73,7 +76,8 @@ THE SOFTWARE.
     }
 }
 
-- (void)windowResized:(NSNotification *)notification {
+- (void)windowResized:(NSNotification *)notification
+{
     Ogre::MetalWindow *metalWindow = [self getMetalWindow:notification];
     if( metalWindow != nil )
     {
@@ -86,7 +90,8 @@ THE SOFTWARE.
     }
 }
 
-- (void)windowClosed:(NSNotification *)notification {
+- (void)windowClosed:(NSNotification *)notification
+{
     Ogre::MetalWindow *metalWindow = [self getMetalWindow:notification];
     if( metalWindow != nil )
     {
@@ -134,6 +139,7 @@ namespace Ogre
         mHidden( false ),
         mIsExternal( false ),
         mHwGamma( true ),
+        mManualRelease( false ),
         mMetalLayer( 0 ),
         mCurrentDrawable( 0 ),
         mDevice( ownerDevice )
@@ -146,10 +152,10 @@ namespace Ogre
     float MetalWindow::getViewPointToPixelScale() const
     {
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
-        return mMetalLayer.contentsScale;
+        return (float)mMetalLayer.contentsScale;
 #else
         NSScreen *screen = mMetalView.window.screen ?: [NSScreen mainScreen];
-        return screen.backingScaleFactor;
+        return (float)screen.backingScaleFactor;
 #endif
     }
     //-------------------------------------------------------------------------
@@ -192,6 +198,15 @@ namespace Ogre
                 desc.sampleCount = mSampleDescription.getColourSamples();
                 desc.usage = MTLTextureUsageRenderTarget;
                 desc.storageMode = MTLStorageModePrivate;
+                RenderSystem *rs = Root::getSingleton().getRenderSystem();
+                assert( rs );
+                TextureGpuManager *textureGpuManager = rs->getTextureGpuManager();
+                bool bAllowMemoryless = textureGpuManager->allowMemoryless();
+                if( bAllowMemoryless )
+                {
+                    if( @available( iOS 10, macOS 11, * ) )
+                        desc.storageMode = MTLStorageModeMemoryless;
+                }
 
                 id<MTLTexture> msaaTex = [mDevice->mDevice newTextureWithDescriptor:desc];
                 if( !msaaTex )
@@ -217,7 +232,7 @@ namespace Ogre
         }
     }
     //-------------------------------------------------------------------------
-    void MetalWindow::swapBuffers( void )
+    void MetalWindow::swapBuffers()
     {
         if( !mDevice->mFrameAborted )
         {
@@ -241,19 +256,50 @@ namespace Ogre
                                                          atTime:presentationTime];
             }
         }
-        mCurrentDrawable = 0;
+
+        if( !mManualRelease )
+            mCurrentDrawable = 0;
     }
     //-------------------------------------------------------------------------
     void MetalWindow::windowMovedOrResized( void )
     {
         CGSize sizePt = mMetalLayer.frame.size;
-        if( mRequestedWidth != sizePt.width || mRequestedHeight != sizePt.height )
+        if( mRequestedWidth != (uint32)sizePt.width || mRequestedHeight != (uint32)sizePt.height )
         {
-            mRequestedWidth = sizePt.width;
-            mRequestedHeight = sizePt.height;
+            // Resolution is a float. How...?
+            mRequestedWidth = (uint32)sizePt.width;
+            mRequestedHeight = (uint32)sizePt.height;
 
             setResolutionFromView();
         }
+    }
+    //-------------------------------------------------------------------------
+    void MetalWindow::setManualSwapRelease( bool bManualRelease ) { mManualRelease = bManualRelease; }
+    //-------------------------------------------------------------------------
+    bool MetalWindow::isManualSwapRelease() const { return mManualRelease; }
+    //-------------------------------------------------------------------------
+    void MetalWindow::performManualRelease()
+    {
+        OGRE_ASSERT_LOW( mManualRelease );
+
+        if( mManualRelease )
+        {
+            mCurrentDrawable = 0;
+
+            OGRE_ASSERT_HIGH( dynamic_cast<MetalTextureGpuWindow *>( mTexture ) );
+            MetalTextureGpuWindow *texWindow = static_cast<MetalTextureGpuWindow *>( mTexture );
+            texWindow->_setBackbuffer( 0 );
+        }
+    }
+    //-------------------------------------------------------------------------
+    void MetalWindow::setWantsToDownload( bool bWantsToDownload )
+    {
+        mMetalLayer.framebufferOnly = bWantsToDownload ? NO : YES;
+    }
+    //-------------------------------------------------------------------------
+    bool MetalWindow::canDownloadData() const
+    {
+        return mCurrentDrawable != 0 && !mMetalLayer.framebufferOnly;
     }
     //-------------------------------------------------------------------------
     bool MetalWindow::nextDrawable( void )
@@ -353,57 +399,68 @@ namespace Ogre
         // create window if nothing was provided
         if( !externalWindowHandle )
         {
-            NSRect frame = NSMakeRect( 0.0, 0.0, mRequestedWidth, mRequestedHeight );
-            if( mRequestedWidth == 1 )
+            if( mHidden )
             {
-                // just make it big enough to see
-                frame.size.width = frame.size.height = 500.0;
+                // Hidden offscreen window: create a Metal view without an NSWindow.
+                // NSWindow must be created on the main thread on macOS; skipping it
+                // makes hidden windows safe to create from any thread.
+                NSRect frame = NSMakeRect( 0.0, 0.0, mRequestedWidth, mRequestedHeight );
+                mMetalView = [[OgreMetalView alloc] initWithFrame:frame];
             }
-            NSWindowStyleMask style =
-                NSWindowStyleMaskResizable | NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
-            if( mRequestedFullscreenMode )
+            else
             {
-                frame.size = NSScreen.mainScreen.visibleFrame.size;
-                style = NSWindowStyleMaskBorderless;
-            }
-            NSWindow *window = [[NSWindow alloc] initWithContentRect:frame
-                                                           styleMask:style
-                                                             backing:NSBackingStoreBuffered
-                                                               defer:YES];
-            window.title = @( mTitle.c_str() );
-            window.contentView = [[OgreMetalView alloc] initWithFrame:frame];
-
-            externalWindowHandle = window;
-            SetupMetalWindowListeners( this, window );
-            if( !mHidden )
+                NSRect frame = NSMakeRect( 0.0, 0.0, mRequestedWidth, mRequestedHeight );
+                if( mRequestedWidth == 1 )
+                {
+                    // just make it big enough to see
+                    frame.size.width = frame.size.height = 500.0;
+                }
+                NSWindowStyleMask style =
+                    NSWindowStyleMaskResizable | NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
+                if( mRequestedFullscreenMode )
+                {
+                    frame.size = NSScreen.mainScreen.visibleFrame.size;
+                    style = NSWindowStyleMaskBorderless;
+                }
+                NSWindow *window = [[NSWindow alloc] initWithContentRect:frame
+                                                               styleMask:style
+                                                                 backing:NSBackingStoreBuffered
+                                                                   defer:YES];
+                window.title = @( mTitle.c_str() );
+                window.contentView = [[OgreMetalView alloc] initWithFrame:frame];
+                externalWindowHandle = window;
+                SetupMetalWindowListeners( this, window );
                 [window orderFront:nil];
+            }
         }
         else
         {
             mIsExternal = true;
         }
 
-        NSView *externalView;
-        if( [externalWindowHandle isKindOfClass:[NSWindow class]] )
+        if( !mMetalView )
         {
-            mWindow = (NSWindow *)externalWindowHandle;
-            externalView = mWindow.contentView;
-        }
-        else
-        {
-            assert( [externalWindowHandle isKindOfClass:[NSView class]] );
-            externalView = (NSView *)externalWindowHandle;
-            mWindow = externalView.window;
-        }
-
-        if( [externalView isKindOfClass:[OgreMetalView class]] )
-            mMetalView = (OgreMetalView *)externalView;
-        else
-        {
-            NSRect frame = externalView.bounds;
-            mMetalView = [[OgreMetalView alloc] initWithFrame:frame];
-            mMetalView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-            [externalView addSubview:mMetalView];
+            NSView *externalView;
+            if( [externalWindowHandle isKindOfClass:[NSWindow class]] )
+            {
+                mWindow = (NSWindow *)externalWindowHandle;
+                externalView = mWindow.contentView;
+            }
+            else
+            {
+                assert( [externalWindowHandle isKindOfClass:[NSView class]] );
+                externalView = (NSView *)externalWindowHandle;
+                mWindow = externalView.window;
+            }
+            if( [externalView isKindOfClass:[OgreMetalView class]] )
+                mMetalView = (OgreMetalView *)externalView;
+            else
+            {
+                NSRect frame = externalView.bounds;
+                mMetalView = [[OgreMetalView alloc] initWithFrame:frame];
+                mMetalView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+                [externalView addSubview:mMetalView];
+            }
         }
 #endif
 
@@ -443,14 +500,18 @@ namespace Ogre
         mMetalView = 0;
     }
     //-----------------------------------------------------------------------------------
-    void MetalWindow::_initialize( TextureGpuManager *textureGpuManager )
+    void MetalWindow::_initialize( TextureGpuManager *textureGpuManager,
+                                   const NameValuePairList *miscParams )
     {
         MetalTextureGpuManager *textureManager =
             static_cast<MetalTextureGpuManager *>( textureGpuManager );
 
         mTexture = textureManager->createTextureGpuWindow( this );
         if( DepthBuffer::DefaultDepthBufferFormat != PFG_NULL )
-            mDepthBuffer = textureManager->createWindowDepthBuffer();
+        {
+            const bool bMemoryLess = requestedMemoryless( miscParams );
+            mDepthBuffer = textureManager->createWindowDepthBuffer( bMemoryLess );
+        }
 
         mTexture->setPixelFormat( mHwGamma ? PFG_BGRA8_UNORM_SRGB : PFG_BGRA8_UNORM );
         if( mDepthBuffer )
@@ -463,16 +524,21 @@ namespace Ogre
 
         if( mDepthBuffer )
         {
-            mTexture->_setDepthBufferDefaults( DepthBuffer::POOL_NON_SHAREABLE, false,
-                                               mDepthBuffer->getPixelFormat() );
+            mTexture->_setDepthBufferDefaults( mDepthBuffer->isTilerMemoryless()
+                                                   ? DepthBuffer::POOL_MEMORYLESS
+                                                   : DepthBuffer::NO_POOL_EXPLICIT_RTV,
+                                               false, mDepthBuffer->getPixelFormat() );
         }
         else
         {
             mTexture->_setDepthBufferDefaults( DepthBuffer::POOL_NO_DEPTH, false, PFG_NULL );
         }
 
+        // We create our MSAA buffer and it is not accessible, thus NotTexture.
+        // Same for our depth buffer.
         mSampleDescription = textureManager->getRenderSystem()->validateSampleDescription(
-            mRequestedSampleDescription, mTexture->getPixelFormat() );
+            mRequestedSampleDescription, mTexture->getPixelFormat(),
+            TextureFlags::NotTexture | TextureFlags::RenderWindowSpecific );
         mTexture->_setSampleDescription( mRequestedSampleDescription, mSampleDescription );
         if( mDepthBuffer )
             mDepthBuffer->_setSampleDescription( mRequestedSampleDescription, mSampleDescription );
@@ -548,11 +614,11 @@ namespace Ogre
         }
         else if( name == "UIView" )
         {
-            *static_cast<void **>( pData ) = (void *)CFBridgingRetain( mMetalView );
+            *static_cast<const void **>( pData ) = (const void *)CFBridgingRetain( mMetalView );
         }
         else
         {
             Window::getCustomAttribute( name, pData );
         }
     }
-}
+}  // namespace Ogre

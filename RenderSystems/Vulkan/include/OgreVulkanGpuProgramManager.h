@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "OgreVulkanPrerequisites.h"
 
 #include "OgreGpuProgramManager.h"
+#include "OgreVulkanDeviceResource.h"
 
 #include "vulkan/vulkan_core.h"
 
@@ -44,7 +45,8 @@ namespace Ogre
 
     bool operator<( const VulkanSingleSetLayoutDesc &a, const VulkanSingleSetLayoutDesc &b );
 
-    class _OgreVulkanExport VulkanGpuProgramManager final : public GpuProgramManager
+    class _OgreVulkanExport VulkanGpuProgramManager final : public GpuProgramManager,
+                                                            protected VulkanDeviceResource
     {
     public:
         typedef GpuProgram *( *CreateGpuProgramCallback )( ResourceManager *creator, const String &name,
@@ -63,12 +65,17 @@ namespace Ogre
         ProgramMap mProgramMap;
 
         typedef map<VulkanSingleSetLayoutDesc, VkDescriptorSetLayout>::type DescriptorSetMap;
-        DescriptorSetMap mDescriptorSetMap;
+        LightweightMutex mMutexDescriptorSet;
+        DescriptorSetMap mDescriptorSetMap;  // GUARDED_BY( mMutexDescriptorSet )
 
         typedef set<VulkanRootLayout *, SortByVulkanRootLayout>::type VulkanRootLayoutSet;
-        VulkanRootLayoutSet mRootLayouts;
+        LightweightMutex mMutexRootLayouts;
+        VulkanRootLayoutSet mRootLayouts;  // GUARDED_BY( mMutexRootLayouts )
 
-        VulkanRootLayout *mTmpRootLayout;
+        VulkanRootLayout *mTmpRootLayout;  // GUARDED_BY( mMutexRootLayouts )
+
+        /// Guards VulkanRootLayout::createVulkanHandles
+        LightweightMutex mMutexRootLayoutHandles;
 
         VulkanDevice *mDevice;
 
@@ -81,6 +88,11 @@ namespace Ogre
         Resource *createImpl( const String &name, ResourceHandle handle, const String &group,
                               bool isManual, ManualResourceLoader *loader, GpuProgramType gptype,
                               const String &syntaxCode ) override;
+
+        void destroyDescriptorSetLayouts();
+
+        void notifyDeviceLost() override;
+        void notifyDeviceRestored( unsigned pass ) override;
 
     public:
         VulkanGpuProgramManager( VulkanDevice *device );
@@ -108,6 +120,8 @@ namespace Ogre
         /// @see    RootLayout::parseRootLayout
         VulkanRootLayout *getRootLayout( const char *rootLayout, const bool bCompute,
                                          const String &filename );
+
+        LightweightMutex &getMutexRootLayoutHandles() { return mMutexRootLayoutHandles; }
     };
 }  // namespace Ogre
 

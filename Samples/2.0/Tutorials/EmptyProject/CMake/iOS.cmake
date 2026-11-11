@@ -22,7 +22,7 @@
 #
 # set_xcode_property (TARGET XCODE_PROPERTY XCODE_VALUE)
 #  A convenience macro for setting xcode specific properties on targets
-#  example: set_xcode_property (myioslib IPHONEOS_DEPLOYMENT_TARGET "3.1")
+#  example: set_xcode_property (myioslib IPHONEOS_DEPLOYMENT_TARGET "15.0")
 #
 # find_host_package (PROGRAM ARGS)
 #  A macro used to find executable programs on the host system, not within the iOS environment.
@@ -67,19 +67,23 @@ set( CMAKE_XCODE_ATTRIBUTE_GCC_WARN_UNUSED_VARIABLE YES )
 set( CMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2" )
 
 # Required as of cmake 2.8.10
-set (CMAKE_OSX_DEPLOYMENT_TARGET "" CACHE STRING "Force unset of the deployment target for iOS" FORCE)
+set (CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Force unset of the deployment target for iOS" FORCE)
 
 # Determine the cmake host system version so we know where to find the iOS SDKs
 find_program (CMAKE_UNAME uname /bin /usr/bin /usr/local/bin)
 if (CMAKE_UNAME)
-  exec_program(uname ARGS -r OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_VERSION)
+	execute_process(
+		COMMAND uname -r
+		OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_VERSION
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
   string (REGEX REPLACE "^([0-9]+)\\.([0-9]+).*$" "\\1" DARWIN_MAJOR_VERSION "${CMAKE_HOST_SYSTEM_VERSION}")
 endif ()
 
 # Force the compilers to gcc for iOS
 include (CMakeForceCompiler)
-CMAKE_FORCE_C_COMPILER (/usr/bin/clang Apple)
-CMAKE_FORCE_CXX_COMPILER (/usr/bin/clang++ Apple)
+set (CMAKE_C_COMPILER /usr/bin/clang)
+set (CMAKE_CXX_COMPILER /usr/bin/clang++)
 set(CMAKE_AR ar CACHE FILEPATH "" FORCE)
 
 # Skip the platform compiler checks for cross compiling
@@ -186,19 +190,19 @@ set (CMAKE_IOS_SDK_ROOT ${CMAKE_IOS_SDK_ROOT} CACHE PATH "Location of the select
 set (CMAKE_OSX_SYSROOT iphoneos)
 
 # set the architecture for iOS
-# NOTE: Currently both ARCHS_STANDARD_32_BIT and ARCHS_UNIVERSAL_IPHONE_OS set armv7 only, so set both manually
+# NOTE: iOS 15 dropped 32-bit (armv7/i386) support, so only 64-bit architectures are built
 if (${IOS_PLATFORM} STREQUAL "OS")
-  set (IOS_ARCH armv7 armv7s arm64)
+  set (IOS_ARCH arm64)
 elseif (${IOS_PLATFORM} STREQUAL "SIMULATOR")
-  set (IOS_ARCH i386)
+  set (IOS_ARCH x86_64)
 elseif (${IOS_PLATFORM} STREQUAL "SIMULATOR64")
   set (IOS_ARCH x86_64)
 endif ()
 
-#set (CMAKE_OSX_ARCHITECTURES ${IOS_ARCH} CACHE string  "Build architecture for iOS")
+#set (CMAKE_OSX_ARCHITECTURES ${IOS_ARCH} CACHE STRING "Build architecture for iOS")
 
 # Set the find root to the iOS developer roots and to user defined paths
-set (CMAKE_FIND_ROOT_PATH ${CMAKE_IOS_DEVELOPER_ROOT} ${CMAKE_IOS_SDK_ROOT} ${CMAKE_PREFIX_PATH} CACHE string  "iOS find search path root")
+set (CMAKE_FIND_ROOT_PATH ${CMAKE_IOS_DEVELOPER_ROOT} ${CMAKE_IOS_SDK_ROOT} ${CMAKE_PREFIX_PATH} CACHE STRING "iOS find search path root")
 
 # default to searching for frameworks first
 set (CMAKE_FIND_FRAMEWORK FIRST)

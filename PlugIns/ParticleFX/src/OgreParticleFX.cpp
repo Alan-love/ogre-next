@@ -25,8 +25,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 -----------------------------------------------------------------------------
 */
-#include "OgreParticleFXPlugin.h"
+
 #include "OgreParticleFXPrerequisites.h"
+
+#include "OgreParticleFXPlugin.h"
+
 #include "OgreRoot.h"
 
 #ifndef OGRE_STATIC_LIB
@@ -35,10 +38,11 @@ namespace Ogre
 {
     static ParticleFXPlugin *plugin;
     //-----------------------------------------------------------------------
-    extern "C" void _OgreParticleFXExport dllStartPlugin( void ) noexcept( false )
+    extern "C" void _OgreParticleFXExport
+    dllStartPlugin( const NameValuePairList *options ) noexcept( false )
     {
         plugin = OGRE_NEW ParticleFXPlugin();
-        Root::getSingleton().installPlugin( plugin );
+        Root::getSingleton().installPlugin( plugin, options );
     }
     //-----------------------------------------------------------------------
     extern "C" void _OgreParticleFXExport dllStopPlugin( void )

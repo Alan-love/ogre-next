@@ -37,7 +37,7 @@ namespace Ogre
 {
     class _OgreVulkanExport VulkanTextureGpuWindow final : public VulkanTextureGpuRenderTarget
     {
-        VulkanWindow *mWindow;
+        VulkanWindowSwapChainBased *mWindow;
 
         uint32 mCurrentSwapchainIdx;
 
@@ -48,7 +48,7 @@ namespace Ogre
         VulkanTextureGpuWindow( GpuPageOutStrategy::GpuPageOutStrategy pageOutStrategy,
                                 VaoManager *vaoManager, IdString name, uint32 textureFlags,
                                 TextureTypes::TextureTypes initialType,
-                                TextureGpuManager *textureManager, VulkanWindow *window );
+                                TextureGpuManager *textureManager, VulkanWindowSwapChainBased *window );
         ~VulkanTextureGpuWindow() override;
 
         void setTextureType( TextureTypes::TextureTypes textureType ) override;
@@ -70,8 +70,6 @@ namespace Ogre
         void swapBuffers() override;
 
         void getCustomAttribute( IdString name, void *pData ) override;
-
-        bool isOpenGLRenderWindow() const override;
 
         void _setToDisplayDummyTexture() override;
         void _notifyTextureSlotChanged( const TexturePool *newPool, uint16 slice ) override;

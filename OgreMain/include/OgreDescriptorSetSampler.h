@@ -30,6 +30,7 @@ THE SOFTWARE.
 #define _OgreDescriptorSetSampler_H_
 
 #include "OgrePrerequisites.h"
+
 #include "OgreCommon.h"
 
 #include "OgreHeaderPrefix.h"
@@ -37,11 +38,11 @@ THE SOFTWARE.
 namespace Ogre
 {
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Resources
-    *  @{
-    */
+     *  @{
+     */
 
     /** Descriptor sets describe what samplers should be bound together in one place.
         Must be created via HlmsManager.
@@ -52,32 +53,30 @@ namespace Ogre
     */
     struct _OgreExport DescriptorSetSampler
     {
-        uint16      mRefCount;
-        uint16      mShaderTypeSamplerCount[NumShaderTypes];
-        void        *mRsData;           /// Render-System specific data
+        uint16 mRefCount;
+        uint16 mShaderTypeSamplerCount[NumShaderTypes];
+        void  *mRsData;  ///< Render-System specific data
 
-        FastArray<const HlmsSamplerblock*> mSamplers;
+        FastArray<const HlmsSamplerblock *> mSamplers;
 
-        DescriptorSetSampler() :
-            mRefCount( 0 ),
-            mRsData( 0 )
+        DescriptorSetSampler() : mRefCount( 0 ), mRsData( 0 )
         {
-            memset( mShaderTypeSamplerCount, 0, sizeof(mShaderTypeSamplerCount) );
+            memset( mShaderTypeSamplerCount, 0, sizeof( mShaderTypeSamplerCount ) );
         }
 
-        bool operator != ( const DescriptorSetSampler &other ) const
+        bool operator!=( const DescriptorSetSampler &other ) const
         {
             const size_t thisNumSamplers = mSamplers.size();
             if( thisNumSamplers != other.mSamplers.size() )
                 return true;
 
-            for( size_t i=0; i<thisNumSamplers; ++i )
+            for( size_t i = 0; i < thisNumSamplers; ++i )
             {
                 if( this->mSamplers[i] != other.mSamplers[i] )
                     return true;
             }
 
-            for( size_t i=0; i<NumShaderTypes; ++i )
+            for( size_t i = 0; i < NumShaderTypes; ++i )
             {
                 if( this->mShaderTypeSamplerCount[i] != other.mShaderTypeSamplerCount[i] )
                     return true;
@@ -86,19 +85,19 @@ namespace Ogre
             return false;
         }
 
-        bool operator < ( const DescriptorSetSampler &other ) const
+        bool operator<( const DescriptorSetSampler &other ) const
         {
             const size_t thisNumSamplers = mSamplers.size();
             if( thisNumSamplers != other.mSamplers.size() )
                 return thisNumSamplers < other.mSamplers.size();
 
-            for( size_t i=0; i<thisNumSamplers; ++i )
+            for( size_t i = 0; i < thisNumSamplers; ++i )
             {
                 if( this->mSamplers[i] != other.mSamplers[i] )
                     return this->mSamplers[i] < other.mSamplers[i];
             }
 
-            for( size_t i=0; i<NumShaderTypes; ++i )
+            for( size_t i = 0; i < NumShaderTypes; ++i )
             {
                 if( this->mShaderTypeSamplerCount[i] != other.mShaderTypeSamplerCount[i] )
                     return this->mShaderTypeSamplerCount[i] < other.mShaderTypeSamplerCount[i];
@@ -109,24 +108,25 @@ namespace Ogre
 
         void checkValidity() const
         {
-#if OGRE_DEBUG_MODE
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_MEDIUM
             size_t totalSamplersUsed = 0u;
 
-            for( size_t i=0; i<NumShaderTypes; ++i )
+            for( size_t i = 0; i < NumShaderTypes; ++i )
                 totalSamplersUsed += mShaderTypeSamplerCount[i];
 
-            assert( totalSamplersUsed > 0 &&
-                    "This DescriptorSetSampler doesn't use any sampler! Perhaps incorrectly setup?" );
-            assert( totalSamplersUsed == mSamplers.size() &&
-                    "This DescriptorSetSampler doesn't use as many samplers as it "
-                    "claims to have, or uses more than it has provided" );
+            OGRE_ASSERT_MEDIUM(
+                totalSamplersUsed > 0 &&
+                "This DescriptorSetSampler doesn't use any sampler! Perhaps incorrectly setup?" );
+            OGRE_ASSERT_MEDIUM( totalSamplersUsed == mSamplers.size() &&
+                                "This DescriptorSetSampler doesn't use as many samplers as it "
+                                "claims to have, or uses more than it has provided" );
 #endif
         }
     };
 
     /** @} */
     /** @} */
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

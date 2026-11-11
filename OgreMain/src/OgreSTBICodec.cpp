@@ -30,13 +30,13 @@ THE SOFTWARE.
 
 #include "OgreSTBICodec.h"
 
+#include "OgreDataStream.h"
 #include "OgreException.h"
 #include "OgreLogManager.h"
-#include "OgreDataStream.h"
 #include "OgreString.h"
 
 #if __OGRE_HAVE_NEON
-#define STBI_NEON
+#    define STBI_NEON
 #endif
 
 #define STBI_NO_STDIO
@@ -46,162 +46,214 @@ THE SOFTWARE.
 
 #include <sstream>
 
-namespace Ogre {
-
+namespace Ogre
+{
     STBIImageCodec::RegisteredCodecList STBIImageCodec::msCodecList;
     //---------------------------------------------------------------------
     void STBIImageCodec::startup()
     {
-        stbi_convert_iphone_png_to_rgb(1);
-        stbi_set_unpremultiply_on_load(1);
+        stbi_convert_iphone_png_to_rgb( 1 );
+        stbi_set_unpremultiply_on_load( 1 );
 
-        LogManager::getSingleton().logMessage(LML_NORMAL, "stb_image - v2.27 - public domain JPEG/PNG reader");
-        
+        LogManager::getSingleton().logMessage( LML_NORMAL,
+                                               "stb_image - v2.27 - public domain JPEG/PNG reader" );
+
         // Register codecs
         String exts = "jpeg,jpg,png,bmp,psd,tga,gif,pic,ppm,pgm";
-        StringVector extsVector = StringUtil::split(exts, ",");
-        for (StringVector::iterator v = extsVector.begin(); v != extsVector.end(); ++v)
+        StringVector extsVector = StringUtil::split( exts, "," );
+        for( StringVector::iterator v = extsVector.begin(); v != extsVector.end(); ++v )
         {
-            ImageCodec2* codec = OGRE_NEW STBIImageCodec(*v);
-            msCodecList.push_back(codec);
-            Codec::registerCodec(codec);
+            ImageCodec2 *codec = OGRE_NEW STBIImageCodec( *v );
+            msCodecList.push_back( codec );
+            Codec::registerCodec( codec );
         }
-        
+
         StringStream strExt;
         strExt << "Supported formats: " << exts;
-        
-        LogManager::getSingleton().logMessage(
-            LML_NORMAL,
-            strExt.str());
+
+        LogManager::getSingleton().logMessage( LML_NORMAL, strExt.str() );
     }
     //---------------------------------------------------------------------
     void STBIImageCodec::shutdown()
     {
-        for (RegisteredCodecList::iterator i = msCodecList.begin();
-            i != msCodecList.end(); ++i)
+        for( RegisteredCodecList::iterator i = msCodecList.begin(); i != msCodecList.end(); ++i )
         {
-            Codec::unregisterCodec(*i);
+            Codec::unregisterCodec( *i );
             OGRE_DELETE *i;
         }
         msCodecList.clear();
     }
     //---------------------------------------------------------------------
-    STBIImageCodec::STBIImageCodec(const String &type):
-        mType(type)
-    { 
-    }
+    STBIImageCodec::STBIImageCodec( const String &type ) : mType( type ) {}
     //---------------------------------------------------------------------
-    DataStreamPtr STBIImageCodec::encode(MemoryDataStreamPtr& input, Codec::CodecDataPtr& pData) const
-    {        
-        OGRE_EXCEPT(Exception::ERR_NOT_IMPLEMENTED,
-                    "STBI encoding not supported",
-                    "STBIImageCodec::encode" ) ;
+    DataStreamPtr STBIImageCodec::encode( MemoryDataStreamPtr &input, Codec::CodecDataPtr &pData ) const
+    {
+        OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED, "STBI encoding not supported",
+                     "STBIImageCodec::encode" );
 
         return DataStreamPtr();
     }
     //---------------------------------------------------------------------
-    void STBIImageCodec::encodeToFile(MemoryDataStreamPtr& input,
-        const String& outFileName, Codec::CodecDataPtr& pData) const
+    void STBIImageCodec::encodeToFile( MemoryDataStreamPtr &input, const String &outFileName,
+                                       Codec::CodecDataPtr &pData ) const
     {
-        OGRE_EXCEPT(Exception::ERR_NOT_IMPLEMENTED,
-                    "STBI encoding not supported",
-                    "STBIImageCodec::encodeToFile" ) ;
+        OGRE_EXCEPT( Exception::ERR_NOT_IMPLEMENTED, "STBI encoding not supported",
+                     "STBIImageCodec::encodeToFile" );
     }
     //---------------------------------------------------------------------
-    Codec::DecodeResult STBIImageCodec::decode(DataStreamPtr& input) const
+    Codec::DecodeResult STBIImageCodec::decode( DataStreamPtr &input ) const
     {
         // Buffer stream into memory (TODO: override IO functions instead?)
-        MemoryDataStream memStream(input, true);
+        MemoryDataStream memStream( input, true );
 
         int width, height, components;
         stbi_uc *pixelData = stbi_load_from_memory(
             memStream.getPtr(), static_cast<int>( memStream.size() ), &width, &height, &components, 0 );
 
-        if (!pixelData)
+        if( !pixelData )
         {
-            OGRE_EXCEPT(Exception::ERR_INTERNAL_ERROR, 
-                "Error decoding image: " + String(stbi_failure_reason()),
-                "STBIImageCodec::decode");
+            OGRE_EXCEPT( Exception::ERR_INTERNAL_ERROR,
+                         "Error decoding image: " + String( stbi_failure_reason() ),
+                         "STBIImageCodec::decode" );
         }
 
-        ImageData2* imgData = OGRE_NEW ImageData2();
+        ImageData2 *imgData = OGRE_NEW ImageData2();
 
-        imgData->box.depth = 1u; // only 2D formats handled by this codec
+        imgData->box.depth = 1u;  // only 2D formats handled by this codec
         imgData->box.numSlices = 1u;
         imgData->box.width = static_cast<uint32>( width );
         imgData->box.height = static_cast<uint32>( height );
-        imgData->numMipmaps = 1u; // no mipmaps in non-DDS
+        imgData->numMipmaps = 1u;  // no mipmaps in non-DDS
         imgData->textureType = TextureTypes::Type2D;
 
         switch( components )
         {
-            case 1:
-                imgData->format = PFG_R8_UNORM;
-                break;
-            case 2:
-                imgData->format = PFG_RG8_UNORM;
-                break;
-            case 3:
-                imgData->format = PFG_RGBA8_UNORM;
-                break;
-            case 4:
-                imgData->format = PFG_RGBA8_UNORM;
-                break;
-            default:
-                stbi_image_free(pixelData);
-                OGRE_DELETE imgData;
-                OGRE_EXCEPT(Exception::ERR_ITEM_NOT_FOUND,
-                            "Unknown or unsupported image format",
-                            "STBIImageCodec::decode");
-                break;
+        case 1:
+            imgData->format = PFG_R8_UNORM;
+            break;
+        case 2:
+            imgData->format = PFG_RG8_UNORM;
+            break;
+        case 3:
+            imgData->format = PFG_RGBA8_UNORM;
+            break;
+        case 4:
+            imgData->format = PFG_RGBA8_UNORM;
+            break;
+        default:
+            stbi_image_free( pixelData );
+            OGRE_DELETE imgData;
+            OGRE_EXCEPT( Exception::ERR_ITEM_NOT_FOUND, "Unknown or unsupported image format",
+                         "STBIImageCodec::decode" );
+            break;
         }
 
         const uint32 rowAlignment = 4u;
         imgData->box.bytesPerPixel = PixelFormatGpuUtils::getBytesPerPixel( imgData->format );
-        imgData->box.bytesPerRow = PixelFormatGpuUtils::getSizeBytes( imgData->box.width,
-                                                                      1u, 1u, 1u,
-                                                                      imgData->format,
-                                                                      rowAlignment );
-        imgData->box.bytesPerImage = imgData->box.bytesPerRow * imgData->box.height;
+        imgData->box.bytesPerRow =
+            static_cast<uint32>( PixelFormatGpuUtils::getSizeBytes( imgData->box.width,  //
+                                                                    1u, 1u, 1u,          //
+                                                                    imgData->format,     //
+                                                                    rowAlignment ) );
+        imgData->box.bytesPerImage = size_t( imgData->box.bytesPerRow ) * size_t( imgData->box.height );
 
         imgData->box.data = OGRE_MALLOC_SIMD( imgData->box.bytesPerImage, MEMCATEGORY_RESOURCE );
 
-        if( components != 3 )
-            memcpy( imgData->box.data, pixelData, imgData->box.bytesPerImage );
-        else
+        if( components == 4 )
         {
+            memcpy( imgData->box.data, pixelData, imgData->box.bytesPerImage );
+        }
+        else if( components != 3 )
+        {
+            const size_t stbiBytesPerRow =
+                PixelFormatGpuUtils::getSizeBytes( imgData->box.width, 1u, 1u, 1u, imgData->format, 1u );
+
             for( size_t y = 0; y < (size_t)height; ++y )
             {
                 uint8 *pDst = reinterpret_cast<uint8 *>( imgData->box.at( 0u, y, 0u ) );
-                uint8 const *pSrc = pixelData + y * imgData->box.bytesPerRow;
-                for( size_t x = 0; x << (size_t)width; ++x )
+                uint8 const *pSrc = pixelData + y * stbiBytesPerRow;
+                memcpy( pDst, pSrc, stbiBytesPerRow );
+            }
+        }
+        else
+        {
+            const size_t stbiBytesPerRow =
+                PixelFormatGpuUtils::getSizeBytes( imgData->box.width, 1u, 1u, 1u, PFG_RGB8_UNORM, 1u );
+
+            for( size_t y = 0; y < (size_t)height; ++y )
+            {
+                uint8 *pDst = reinterpret_cast<uint8 *>( imgData->box.at( 0u, y, 0u ) );
+                uint8 const *pSrc = pixelData + y * stbiBytesPerRow;
+                for( size_t x = 0; x < (size_t)width; ++x )
                 {
                     const uint8 b = *pSrc++;
                     const uint8 g = *pSrc++;
                     const uint8 r = *pSrc++;
 
-                    *pDst++ = r;
-                    *pDst++ = g;
                     *pDst++ = b;
+                    *pDst++ = g;
+                    *pDst++ = r;
                     *pDst++ = 0xFF;
                 }
             }
         }
-        stbi_image_free(pixelData);
+        stbi_image_free( pixelData );
 
         DecodeResult ret;
         ret.first.reset();
-        ret.second = CodecDataPtr(imgData);
+        ret.second = CodecDataPtr( imgData );
         return ret;
     }
-    //---------------------------------------------------------------------    
-    String STBIImageCodec::getType() const
+    //---------------------------------------------------------------------
+    String STBIImageCodec::getType() const { return mType; }
+    //---------------------------------------------------------------------
+    static void logUnsupportedMagic( const char *magicNumberPtr, size_t maxbytes )
     {
-        return mType;
+        StringStream strMagic;
+        bool lastHex = false;
+        for( size_t i = 0; i < maxbytes; ++i )
+        {
+            uint8_t ch = magicNumberPtr[i];
+            if( std::isprint( ch ) )
+            {
+                if( lastHex )
+                    strMagic << " ";
+                strMagic << ch;
+                lastHex = false;
+            }
+            else
+            {
+                char hex[16];
+                sprintf( hex, "0x%02x", ch );
+                strMagic << " " << hex;
+                lastHex = true;
+            }
+        }
+        // In Gazebo, these logs appear by default in ~/.gz/rendering/ogre2.log.
+        LogManager::getSingleton().logMessage(
+            std::string( "Unsupported magic in STBIImageCodec::magicNumberPtr(" ) +
+            std::to_string( maxbytes ) + "): " + strMagic.str() );
     }
     //---------------------------------------------------------------------
-    String STBIImageCodec::magicNumberToFileExt(const char *magicNumberPtr, size_t maxbytes) const
+    String STBIImageCodec::magicNumberToFileExt( const char *magicNumberPtr, size_t maxbytes ) const
     {
+        static const uint8_t png_sig[] = { 137, 80, 78, 71, 13, 10, 26, 10 };
+        static const uint8_t jpg_sig[] = { 0xff, 0xd8, 0xff };
+
+        if( maxbytes >= sizeof( png_sig ) && memcmp( magicNumberPtr, &png_sig, sizeof( png_sig ) ) == 0 )
+            return "png";
+
+        if( maxbytes >= sizeof( jpg_sig ) && memcmp( magicNumberPtr, &jpg_sig, sizeof( jpg_sig ) ) == 0 )
+            return "jpg";
+
+        logUnsupportedMagic( magicNumberPtr, maxbytes );
+
         return BLANKSTRING;
     }
-}
+    //---------------------------------------------------------------------
+    STBIImageCodec::ValidationStatus STBIImageCodec::validateMagicNumber( const char *magicNumberPtr,
+                                                                          size_t maxbytes ) const
+    {
+        return CodecUnknown;
+    }
+}  // namespace Ogre

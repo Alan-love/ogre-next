@@ -30,6 +30,8 @@ THE SOFTWARE.
 
 #include "OgrePrerequisites.h"
 
+#include "OgreVulkanBuildSettings.h"
+
 #include "OgreLogManager.h"
 
 #ifdef __MINGW32__
@@ -97,6 +99,7 @@ namespace Ogre
     class VulkanDynamicBuffer;
     struct VulkanGlobalBindingTable;
     class VulkanGpuProgramManager;
+    struct VulkanPhysicalDevice;
     class VulkanProgram;
     class VulkanProgramFactory;
     class VulkanQueue;
@@ -107,6 +110,7 @@ namespace Ogre
     class VulkanTextureGpuManager;
     class VulkanVaoManager;
     class VulkanWindow;
+    class VulkanWindowSwapChainBased;
     class VulkanDiscardBuffer;
     class VulkanDiscardBufferManager;
 
@@ -143,32 +147,19 @@ namespace Ogre
         };
     }
 
+    void onVulkanFailure( VulkanDevice *device, int result, const char *message, const char *func,
+                          const char *file, long line );
 }  // namespace Ogre
 
-#define OGRE_VK_EXCEPT( code, num, desc, src ) \
-    OGRE_EXCEPT( code, desc + ( "\nVkResult = " + vkResultToString( num ) ), src )
-
-#if OGRE_COMPILER == OGRE_COMPILER_MSVC
-#    define checkVkResult( result, functionName ) \
-        do \
+#define checkVkResult( device, result, functionName ) \
+    do \
+    { \
+        if( result != VK_SUCCESS ) \
         { \
-            if( result != VK_SUCCESS ) \
-            { \
-                OGRE_VK_EXCEPT( Exception::ERR_RENDERINGAPI_ERROR, result, functionName " failed", \
-                                __FUNCSIG__ ); \
-            } \
-        } while( 0 )
-#else
-#    define checkVkResult( result, functionName ) \
-        do \
-        { \
-            if( result != VK_SUCCESS ) \
-            { \
-                OGRE_VK_EXCEPT( Exception::ERR_RENDERINGAPI_ERROR, result, functionName " failed", \
-                                __PRETTY_FUNCTION__ ); \
-            } \
-        } while( 0 )
-#endif
+            onVulkanFailure( device, result, functionName " failed", OGRE_CURRENT_FUNCTION, __FILE__, \
+                             __LINE__ ); \
+        } \
+    } while( 0 )
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_WIN32
 #    if !defined( __MINGW32__ )
@@ -195,13 +186,13 @@ namespace Ogre
 #        endif
 #    endif
 #elif defined( OGRE_GCC_VISIBILITY )
-#   if !defined( OGRE_STATIC_LIB )
-#       define _OgreVulkanExport __attribute__ ((visibility("default")))
-#   else
-#       define _OgreVulkanExport __attribute__ ((visibility("hidden")))
-#   endif
+#    if !defined( OGRE_STATIC_LIB )
+#        define _OgreVulkanExport __attribute__( ( visibility( "default" ) ) )
+#    else
+#        define _OgreVulkanExport __attribute__( ( visibility( "hidden" ) ) )
+#    endif
 #else
 #    define _OgreVulkanExport
 #endif
 
-#endif  //#ifndef _OgreVulkanPrerequisites_H_
+#endif  // #ifndef _OgreVulkanPrerequisites_H_

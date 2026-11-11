@@ -31,20 +31,19 @@ THE SOFTWARE.
 
 using namespace Ogre;
 
-ErrorDialog::ErrorDialog()
-{
-}
+ErrorDialog::ErrorDialog() {}
 
-void ErrorDialog::display(const String& errorMessage, String logName)
+void ErrorDialog::display( const String &errorMessage, String logName )
 {
-#pragma unused(logName)
+#pragma unused( logName )
     // Because Carbon is missing 64-bit support we have to use Cocoa
     NSApplicationLoad();
-    @autoreleasepool {
+    @autoreleasepool
+    {
         NSAlert *alert = [[NSAlert alloc] init];
 
         [alert setMessageText:@"An error has occurred!"];
-        [alert setAlertStyle:NSCriticalAlertStyle];
+        [alert setAlertStyle:NSAlertStyleCritical];
         [alert setInformativeText:[NSString stringWithCString:errorMessage.c_str()
                                                      encoding:NSASCIIStringEncoding]];
         [alert runModal];

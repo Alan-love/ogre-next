@@ -2,7 +2,7 @@
 
 Ogre-Next is a 3D graphics rendering engine. Not to be confused with a game engine which provides Networking, Sound, Physics, etc.
 
-Ogre-Next 2.3 has had a substantial overhaul to focus on high performance graphics using Data Oriented Design with:
+Ogre-Next 3.0 has had a substantial overhaul to focus on high performance graphics using Data Oriented Design with:
  * Cache friendly Entity and Node layout
  * Threaded batch processing of Nodes, Frustum Culling and other techniques such as Forward Clustered
  * SIMD processing using AoSoA (Array of Structures of Arrays) memory layout
@@ -20,7 +20,9 @@ differences have diverged long enough.
 
 | Build | Status (github) |
 |-------|-----------------|
+| Linux |[![CI](https://github.com/OGRECave/ogre-next/actions/workflows/linux.build.yml/badge.svg)](https://github.com/OGRECave/ogre-next/actions/workflows/linux.build.yml)|
 | MSVC | [![Build status](https://ci.appveyor.com/api/projects/status/github/OGRECave/ogre-next?branch=master&svg=true)](https://ci.appveyor.com/project/MatiasNGoldberg/ogre-next/branch/master)|
+| Clang-Format Style Consistency |[![CI](https://github.com/OGRECave/ogre-next/actions/workflows/clang-format.yml/badge.svg)](https://github.com/OGRECave/ogre-next/actions/workflows/clang-format.yml)|
 
 ## Supported Backends
 
@@ -31,24 +33,23 @@ differences have diverged long enough.
 
 ## Supported Platforms
 
- * Windows (XP\*, 7, 8, 10)
+ * Windows (7, 8, 10)
  * Linux
- * macOS\*\*
+ * macOS\*
  * iOS
- * Android\*\*\*
+ * Android\*\*
 
-(\*) XP support is through GL3+. Recent drivers are needed. Old GPUs do not have stable GL drivers capable of running Ogre-Next 2.x.<br/>
-(\*\*) Metal Backend is highly recommended. GL backend is supported in macOS, but the window subsystem hasn't been ported to 2.3 yet.<br/>
-(\*\*\*) Device must be Vulkan-capable. Android 7.0+ is supported; but Android 8.0+ is strongly recommended due to lots of driver bugs in older versions.<br/>
+(\*) Metal Backend is highly recommended. GL backend is supported in macOS, but the window subsystem hasn't been ported to 3.0 yet.<br/>
+(\*\*) Device must be Vulkan-capable. Android 7.0+ is supported; but Android 8.0+ is strongly recommended due to lots of driver bugs in older versions.<br/>
 
 ## Supported Compilers
 
  * Clang 3.3 or newer
  * GCC 5 or newer
- * VS2008 or newer
+ * VS2015 or newer
  
 ## Samples
-For a list of samples and their demonstrated features, refer to the [samples section in the manual.](https://ogrecave.github.io/ogre-next/api/2.3/_samples.html) 
+For a list of samples and their demonstrated features, refer to the [samples section in the manual.](https://ogrecave.github.io/ogre-next/api/latest/_samples.html) 
 
 # Who's using it?
 
@@ -67,6 +68,10 @@ For a list of samples and their demonstrated features, refer to the [samples sec
 ## [Sunset Rangers](https://store.steampowered.com/app/559340/Sunset_Rangers/)
 
 ![](./Docs/frontpage/SunsetRangers.jpg)
+
+## [Stunt Rally 3](https://stuntrally.tuxfamily.org/)
+
+![](./Docs/frontpage/StuntRally3.jpg)
 
 
 # Features
@@ -105,12 +110,12 @@ For a list of samples and their demonstrated features, refer to the [samples sec
 * Git
 * For HW & SW requirements, please visit http://www.ogre3d.org/developers/requirements
 * Our source dependencies are grouped in [ogre-next-deps](https://github.com/OGRECave/ogre-next-deps) repo
+* Python 3.x is needed to build shaderc dependency for Vulkan.
 
 # Dependencies (Windows)
 
-* Visual Studio 2008 SP1 - 2017 (2019 not tested). MinGW may work but we strongly recommend Visual Studio.
-* [DirectX June 2010 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=6812). Optional.
-  Needed if you use older Visual Studio versions and want the D3D11 plugin. Also comes with useful tools.
+* Visual Studio 2015 - 2022. MinGW may work but we strongly recommend Visual Studio.
+* [DirectX June 2010 SDK](https://www.microsoft.com/en-us/download/details.aspx?id=6812). Optional. Comes with useful tools.
 * Windows 10 SDK. Contains the latest DirectX SDK, thus recommended over the DX June 2010 SDK,
   but you may still want to install the June 2010 SDK for those tools.
 * Windows 7 or newer is highly recommended. For Windows Vista & 7, you need to have the
@@ -124,8 +129,16 @@ For a list of samples and their demonstrated features, refer to the [samples sec
 Debian-based. Run:
 
 ```
-sudo apt-get install libfreetype6-dev libfreeimage-dev libzzip-dev libxrandr-dev libxaw7-dev freeglut3-dev libgl1-mesa-dev libglu1-mesa-dev doxygen graphviz python-clang-4.0 libsdl2-dev cmake ninja-build git
+sudo apt-get install libfreetype6-dev libfreeimage-dev libzzip-dev libxrandr-dev libxaw7-dev freeglut3-dev libgl1-mesa-dev libglu1-mesa-dev libxcb-randr0-dev libx11-xcb-dev libxcb-keysyms1-dev doxygen graphviz python3-clang libsdl2-dev cmake ninja-build git
 ```
+
+If you wish to build Material Editor, you will also need wxWidgets:
+
+```
+sudo apt install libwxgtk3.2-dev libgtk-3-dev
+```
+
+Note that "libwxgtk3.2" may be a different version (e.g. 3.1, 3.3) depending on the distro.
 
 Arch-based Run:
 
@@ -137,7 +150,8 @@ pacman -S freeimage freetype2 libxaw libxrandr mesa zziplib cmake gcc
 
 We provide quick download-build scripts under the [Scripts/BuildScripts/output](Scripts/BuildScripts/output) folder.
 
-You can download all of these scripts [as a compressed 7zip file](https://bintray.com/darksylinc/ogre-next/download_file?file_path=build_ogre_scripts-master.7z)
+You can download all of these scripts [as a compressed 7zip file](https://github.com/OGRECave/ogre-next/releases/download/bin-releases/build_ogre_scripts-master.7z).
+We also have an archive if you're looking for [scripts to build older versions](https://github.com/OGRECave/ogre-next/releases/bin-releases/).
 
 If you're on Linux, make sure to first install the dependencies (i.e. run the sudo apt-get above)
 
@@ -145,11 +159,11 @@ If you're on Linux, make sure to first install the dependencies (i.e. run the su
 
 If for some reason you want to do it by hand, there's no script for your platform,
 or you want to learn what the scripts are actually doing, see
-[Setting Up Ogre](https://ogrecave.github.io/ogre-next/api/2.3/_setting_up_ogre.html) from the Ogre manual.
+[Setting Up Ogre](https://ogrecave.github.io/ogre-next/api/latest/_setting_up_ogre.html) from the Ogre manual.
 
 # Manual
 
-For more information see the [online manual](https://ogrecave.github.io/ogre-next/api/2.3/manual.html).
+For more information see the [online manual](https://ogrecave.github.io/ogre-next/api/latest/manual.html).
 The manual can build on Linux using Doxygen:
 
 ```
@@ -157,18 +171,53 @@ cd build/Debug
 ninja OgreDoc
 ```
 
+# Resolving Merge Conflicts in 3.0
+
+Users who run a customized version of Ogre-Next may found rebasing to the latest version a near impossible job due to the sheer amount of minor merge conflicts when upgrading to Ogre-Next 3.0
+
+See [this guide](https://ogrecave.github.io/ogre-next/api/latest/_resolving_merge_conflicts30.html) on how to deal with them more easily.
+
+
+# OgreNext 3.0 changes
+
+For details see [What's new?](https://ogrecave.github.io/ogre-next/api/latest/_ogre30_changes.html) from our manual.
+
+
+## OgreNext versioning
+
+Since OgreNext 3.0 we've modified our versioning scheme to be more consistent with other projects and what developers expect.
+
+Our [Github ticket](https://github.com/OGRECave/ogre-next/issues/259#issuecomment-1086954560) and [Forum post](https://forums.ogre3d.org/viewtopic.php?t=96660) explain it in detail. Basically it boils down to:
+
+OgreNext now uses a *modified* variation of [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
+
+ - PATCH can only be bumped as long as ABI compatibility remains 100%.
+ - MINOR bumps as long as API compatibility stays >= 95% for all components and plugins, according to abi-compliance-checker. Measured against MAJOR.0.0
+   - This is not strictly in compliance to SemVer, but stays close to its spirit
+ - MAJOR bumps when API compatibility is < 95%. Although MAJOR can be bumped even if compat >= 95% at the dev's discretion.
+
+As a result:
+
+ - Patch +1 bumps can be release for hot fixes. Bugs that are easy to fix without breaking ABI and deploy everywhere.
+ - Minor +1 tells our users upgrading is painless. A recompilation is necessary. Build errors may appear, but they should be very quick & easy to fix.
+ Projects like Ignition which have strong ABI requirements can leverage whether to move to Minor+1 if they have to when a certain bugfix is too important and can't be done without breaking OgreNext's ABI.
+ Main focus for minor bumps will be for fixing bugs that can't be or are too hard to fix without breaking ABI.
+ - Major +1 tells our users to prepare for larger upgrading efforts. Although not necessarily too large if we release more often.
+
+For OgreNext <= 2.3 the versioning stays the same.
+
 # Support and Resources
 
  * [Forums](https://forums.ogre3d.org/viewforum.php?f=25)
  * [Bug Reports](https://github.com/OGRECave/ogre-next/issues)
  * [Contributing via Pull Requests](https://github.com/OGRECave/ogre-next/pulls)
- * [Documentation](https://ogrecave.github.io/ogre-next/api/2.3/)
+ * [Documentation](https://ogrecave.github.io/ogre-next/api/latest/)
  * [Ogre 2.1+ FAQ](http://wiki.ogre3d.org/Ogre+2.1+FAQ)
  * [Older resources for interfaces carried over from 1.x](https://www.ogre3d.org/documentation)
 
 # Samples
 
-If you want to test or evaluate Ogre, you can try the [prebuilt samples for Windows](https://bintray.com/darksylinc/ogre-next/download_file?file_path=ogre-samples-windows-x64-vs2015.7z).
+If you want to test or evaluate Ogre, you can try the [prebuilt samples for Windows](https://github.com/OGRECave/ogre-next/releases/download/bin-releases/ogre-samples-windows-x64-vs2015.7z).
 
 # Unit Tests
 

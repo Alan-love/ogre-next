@@ -89,102 +89,102 @@ namespace Ogre
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdSyntax final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdBuildParamsFromRefl final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
 
         class _OgreExport CmdClipDistance final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdSkeletal final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdMorph final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdPose final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdVTF final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdVPRTI final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdManualNamedConstsFile final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdAdjacency final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdComputeGroupDims final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdRootLayout final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         class _OgreExport CmdUsesArrayBindings final : public ParamCommand
         {
         public:
             String doGet( const void *target ) const override;
-            void doSet( void *target, const String &val ) override;
+            void   doSet( void *target, const String &val ) override;
         };
         // Command object for setting / getting parameters
-        static CmdType msTypeCmd;
-        static CmdSyntax msSyntaxCmd;
-        static CmdBuildParamsFromRefl msBuildParamsFromReflCmd;
-        static CmdClipDistance msClipDistanceCmd;
-        static CmdSkeletal msSkeletalCmd;
-        static CmdMorph msMorphCmd;
-        static CmdPose msPoseCmd;
-        static CmdVTF msVTFCmd;
-        static CmdVPRTI msVPRTICmd;
+        static CmdType                  msTypeCmd;
+        static CmdSyntax                msSyntaxCmd;
+        static CmdBuildParamsFromRefl   msBuildParamsFromReflCmd;
+        static CmdClipDistance          msClipDistanceCmd;
+        static CmdSkeletal              msSkeletalCmd;
+        static CmdMorph                 msMorphCmd;
+        static CmdPose                  msPoseCmd;
+        static CmdVTF                   msVTFCmd;
+        static CmdVPRTI                 msVPRTICmd;
         static CmdManualNamedConstsFile msManNamedConstsFileCmd;
-        static CmdAdjacency msAdjacencyCmd;
-        static CmdComputeGroupDims msComputeGroupDimsCmd;
-        static CmdRootLayout msRootLayout;
-        static CmdUsesArrayBindings msUsesArrayBindings;
+        static CmdAdjacency             msAdjacencyCmd;
+        static CmdComputeGroupDims      msComputeGroupDimsCmd;
+        static CmdRootLayout            msRootLayout;
+        static CmdUsesArrayBindings     msUsesArrayBindings;
         /// The type of the program
         GpuProgramType mType;
         /// The name of the file to load source from (may be blank)
@@ -251,7 +251,7 @@ namespace Ogre
         mutable GpuNamedConstantsPtr mConstantDefs;
         /// File from which to load named constants manually
         String mManualNamedConstantsFile;
-        bool mLoadedManualNamedConstants;
+        bool   mLoadedManualNamedConstants;
 
         /** Internal method for setting up the basic parameter definitions for a subclass.
             @remarks
@@ -281,7 +281,7 @@ namespace Ogre
         GpuProgram( ResourceManager *creator, const String &name, ResourceHandle handle,
                     const String &group, bool isManual = false, ManualResourceLoader *loader = 0 );
 
-        virtual ~GpuProgram() {}
+        ~GpuProgram() override {}
 
         /** Sets the filename of the source assembly for this program.
             @remarks
@@ -478,14 +478,14 @@ namespace Ogre
             return mVpAndRtArrayIndexFromAnyShader;
         }
 
-        /** Sets whether this geometry program requires adjacency information
-            from the input primitives.
-        */
-        virtual void setAdjacencyInfoRequired( bool r ) { mNeedsAdjacencyInfo = r; }
-        /** Returns whether this geometry program requires adjacency information
-            from the input primitives.
-        */
-        virtual bool isAdjacencyInfoRequired() const { return mNeedsAdjacencyInfo; }
+        OGRE_DEPRECATED_VER( 4 ) virtual void setAdjacencyInfoRequired( bool r )
+        {
+            mNeedsAdjacencyInfo = r;
+        }
+        OGRE_DEPRECATED_VER( 4 ) virtual bool isAdjacencyInfoRequired() const
+        {
+            return mNeedsAdjacencyInfo;
+        }
         /** Sets the number of process groups dispatched by this compute
             program.
          */
@@ -512,7 +512,7 @@ namespace Ogre
 
         /** Returns true if default parameters have been set up.
          */
-        virtual bool hasDefaultParameters() const { return !mDefaultParams.isNull(); }
+        virtual bool hasDefaultParameters() const { return mDefaultParams.get() != nullptr; }
 
         /** Returns whether a vertex program wants light and material states to be passed
             through fixed pipeline low level API rendering calls (default false, subclasses can override)

@@ -34,79 +34,70 @@ Copyright (c) 2000-present Torus Knot Software Ltd
 
 namespace Ogre
 {
-    void VulkanSupport::enumerateDevices( VulkanRenderSystem *renderSystem )
-    {
-        mDevices.clear();
-
-        VkInstance instance = renderSystem->getVkInstance();
-
-        VkResult result = VK_SUCCESS;
-
-        uint32 numDevices = 0u;
-        result = vkEnumeratePhysicalDevices( instance, &numDevices, NULL );
-        checkVkResult( result, "vkEnumeratePhysicalDevices" );
-
-        if( numDevices == 0u )
-        {
-            LogManager::getSingleton().logMessage( "[Vulkan] No Vulkan devices found." );
-            return;
-        }
-
-        char tmpBuffer[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE + 32];
-        LwString logStr( LwString::FromEmptyPointer( tmpBuffer, sizeof( tmpBuffer ) ) );
-
-        logStr.clear();
-        logStr.a( "[Vulkan] Found ", numDevices, " devices" );
-        LogManager::getSingleton().logMessage( logStr.c_str() );
-
-        FastArray<VkPhysicalDevice> pd;
-        pd.resize( numDevices );
-        result = vkEnumeratePhysicalDevices( instance, &numDevices, pd.begin() );
-        checkVkResult( result, "vkEnumeratePhysicalDevices" );
-
-        LogManager::getSingleton().logMessage( "[Vulkan] Found devices:" );
-
-        mDevices.reserve( numDevices );
-        for( uint32 i = 0u; i < numDevices; ++i )
-        {
-            VkPhysicalDeviceProperties deviceProps;
-            vkGetPhysicalDeviceProperties( pd[i], &deviceProps );
-
-            logStr.clear();
-            logStr.a( deviceProps.deviceName, " #", i );
-            mDevices.push_back( logStr.c_str() );
-
-            LogManager::getSingleton().logMessage( logStr.c_str() );
-        }
-    }
-    //-------------------------------------------------------------------------
-    void VulkanSupport::initialize( VulkanRenderSystem *renderSystem )
-    {
-        if( renderSystem->getVkInstance() )
-            return;
-
-        renderSystem->initializeVkInstance();
-        enumerateDevices( renderSystem );
-    }
+    void VulkanSupport::setSupported() { mSupported = true; }
     //-------------------------------------------------------------------------
     void VulkanSupport::addConfig( VulkanRenderSystem *renderSystem )
     {
-        initialize( renderSystem );
-
         ConfigOption optDevices;
+        ConfigOption optInterfaces;
+        ConfigOption optFSAA;
+        ConfigOption optSRGB;
 
         optDevices.name = "Device";
-
-        FastArray<String>::const_iterator itor = mDevices.begin();
-        FastArray<String>::const_iterator endt = mDevices.end();
-
-        while( itor != endt )
-            optDevices.possibleValues.push_back( *itor++ );
-
-        optDevices.currentValue = mDevices.front();
+        optDevices.possibleValues.push_back( "(default)" );
+        const auto &devices = renderSystem->getVulkanPhysicalDevices();
+        for( auto &device : devices )
+            optDevices.possibleValues.push_back( device.title );
+        optDevices.currentValue = optDevices.possibleValues.front();
         optDevices.immutable = false;
 
+        optInterfaces.name = "Interface";
+#ifdef OGRE_VULKAN_WINDOW_WIN32
+        optInterfaces.possibleValues.push_back( "win32" );
+#endif
+#ifdef OGRE_VULKAN_WINDOW_XCB
+        optInterfaces.possibleValues.push_back( "xcb" );
+        // optInterfaces.possibleValues.push_back( "wayland" );
+#endif
+#ifdef OGRE_VULKAN_WINDOW_ANDROID
+        optInterfaces.possibleValues.push_back( "android" );
+#endif
+#ifdef OGRE_VULKAN_WINDOW_NULL
+        optInterfaces.possibleValues.push_back( "null" );
+#endif
+        optInterfaces.currentValue = optInterfaces.possibleValues.front();
+        optInterfaces.immutable = false;
+
+        optFSAA.name = "FSAA";
+        optFSAA.immutable = false;
+        optFSAA.possibleValues.push_back( "1" );
+        optFSAA.possibleValues.push_back( "2" );
+        optFSAA.possibleValues.push_back( "4" );
+        optFSAA.possibleValues.push_back( "8" );
+        optFSAA.possibleValues.push_back( "16" );
+        //        for( vector<int>::type::iterator it = mFSAALevels.begin(); it != mFSAALevels.end();
+        //        ++it )
+        //        {
+        //            String val = StringConverter::toString( *it );
+        //            optFSAA.possibleValues.push_back( val );
+        //            /* not implementing CSAA in GL for now
+        //            if (*it >= 8)
+        //                optFSAA.possibleValues.push_back(val + " [Quality]");
+        //            */
+        //        }
+        optFSAA.currentValue = "1";
+
+        // SRGB on auto window
+        optSRGB.name = "sRGB Gamma Conversion";
+        optSRGB.possibleValues.push_back( "Yes" );
+        optSRGB.possibleValues.push_back( "No" );
+        optSRGB.currentValue = "Yes";
+        optSRGB.immutable = false;
+
         mOptions[optDevices.name] = optDevices;
+        mOptions[optInterfaces.name] = optInterfaces;
+        mOptions[optFSAA.name] = optFSAA;
+        mOptions[optSRGB.name] = optSRGB;
     }
     //-------------------------------------------------------------------------
     void VulkanSupport::setConfigOption( const String &name, const String &value )
@@ -132,9 +123,10 @@ namespace Ogre
         if( it != mOptions.end() )
         {
             const String deviceName = it->second.currentValue;
-            if( std::find( mDevices.begin(), mDevices.end(), deviceName ) == mDevices.end() )
+            if( std::find( it->second.possibleValues.begin(), it->second.possibleValues.end(),
+                           deviceName ) == it->second.possibleValues.end() )
             {
-                setConfigOption( "Device", mDevices.front() );
+                setConfigOption( "Device", "(default)" );
                 return "Requested rendering device could not be found, default will be used instead.";
             }
         }
@@ -142,26 +134,22 @@ namespace Ogre
         return BLANKSTRING;
     }
     //-------------------------------------------------------------------------
-    uint32 VulkanSupport::getSelectedDeviceIdx() const
+    String VulkanSupport::getSelectedDeviceName() const
     {
-        uint32 deviceIdx = 0u;
-
         ConfigOptionMap::const_iterator it = mOptions.find( "Device" );
         if( it != mOptions.end() )
-        {
-            const String deviceName = it->second.currentValue;
-            FastArray<String>::const_iterator itDevice =
-                std::find( mDevices.begin(), mDevices.end(), deviceName );
-            if( itDevice != mDevices.end() )
-                deviceIdx = itDevice - mDevices.begin();
-        }
+            return it->second.currentValue;
 
-        return deviceIdx;
+        return "(default)";
     }
     //-------------------------------------------------------------------------
     ConfigOptionMap &VulkanSupport::getConfigOptions( VulkanRenderSystem *renderSystem )
     {
-        initialize( renderSystem );
+        assert( !mOptions.empty() );  // addConfig() already called
         return mOptions;
     }
+    //-------------------------------------------------------------------------
+    IdString VulkanSupport::getInterfaceName() const { return "null"; }
+    //-------------------------------------------------------------------------
+    String VulkanSupport::getInterfaceNameStr() const { return "null"; }
 }  // namespace Ogre

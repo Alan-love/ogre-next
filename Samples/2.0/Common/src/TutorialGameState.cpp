@@ -5,18 +5,26 @@
 
 #include "OgreSceneManager.h"
 
-#include "OgreOverlayManager.h"
 #include "OgreOverlay.h"
 #include "OgreOverlayContainer.h"
+#include "OgreOverlayManager.h"
 #include "OgreTextAreaOverlayElement.h"
 
-#include "OgreRoot.h"
 #include "OgreFrameStats.h"
+#include "OgreRoot.h"
 
-#include "OgreHlmsManager.h"
+#include "OgreGpuProgramManager.h"
 #include "OgreHlms.h"
 #include "OgreHlmsCompute.h"
-#include "OgreGpuProgramManager.h"
+#include "OgreHlmsManager.h"
+
+#ifdef AUTO_TESTING
+#    include <fstream>
+#    include <iostream>
+#    include <sstream>
+#    include <stdexcept>
+#    include <string>
+#endif
 
 using namespace Demo;
 
@@ -43,25 +51,22 @@ namespace Demo
         mGraphicsSystem = graphicsSystem;
     }
     //-----------------------------------------------------------------------------------
-    void TutorialGameState::createScene01()
-    {
-        createDebugTextOverlay();
-    }
+    void TutorialGameState::createScene01() { createDebugTextOverlay(); }
     //-----------------------------------------------------------------------------------
     void TutorialGameState::createDebugTextOverlay()
     {
         Ogre::v1::OverlayManager &overlayManager = Ogre::v1::OverlayManager::getSingleton();
         Ogre::v1::Overlay *overlay = overlayManager.create( "DebugText" );
 
-        Ogre::v1::OverlayContainer *panel = static_cast<Ogre::v1::OverlayContainer*>(
-            overlayManager.createOverlayElement("Panel", "DebugPanel"));
-        mDebugText = static_cast<Ogre::v1::TextAreaOverlayElement*>(
-                    overlayManager.createOverlayElement( "TextArea", "DebugText" ) );
+        Ogre::v1::OverlayContainer *panel = static_cast<Ogre::v1::OverlayContainer *>(
+            overlayManager.createOverlayElement( "Panel", "DebugPanel" ) );
+        mDebugText = static_cast<Ogre::v1::TextAreaOverlayElement *>(
+            overlayManager.createOverlayElement( "TextArea", "DebugText" ) );
         mDebugText->setFontName( "DebugFont" );
         mDebugText->setCharHeight( 0.025f );
 
-        mDebugTextShadow= static_cast<Ogre::v1::TextAreaOverlayElement*>(
-                    overlayManager.createOverlayElement( "TextArea", "0DebugTextShadow" ) );
+        mDebugTextShadow = static_cast<Ogre::v1::TextAreaOverlayElement *>(
+            overlayManager.createOverlayElement( "TextArea", "0DebugTextShadow" ) );
         mDebugTextShadow->setFontName( "DebugFont" );
         mDebugTextShadow->setCharHeight( 0.025f );
         mDebugTextShadow->setColour( Ogre::ColourValue::Black );
@@ -79,11 +84,12 @@ namespace Demo
         {
             outText = mHelpDescription;
             outText += "\n\nPress F1 to toggle help";
-            outText += "\n\nProtip: Ctrl+F1 will reload PBS shaders (for real time template editing).\n"
-                       "Ctrl+F2 reloads Unlit shaders.\n"
-                       "Ctrl+F3 reloads Compute shaders.\n"
-                       "Note: If the modified templates produce invalid shader code, "
-                       "crashes or exceptions can happen.\n";
+            outText +=
+                "\n\nProtip: Ctrl+F1 will reload PBS shaders (for real time template editing).\n"
+                "Ctrl+F2 reloads Unlit shaders.\n"
+                "Ctrl+F3 reloads Compute shaders.\n"
+                "Note: If the modified templates produce invalid shader code, "
+                "crashes or exceptions can happen.\n";
             return;
         }
 
@@ -91,18 +97,45 @@ namespace Demo
 
         Ogre::String finalText;
         finalText.reserve( 128 );
-        finalText  = "Frame time:\t";
+        finalText = "Frame time:\t";
         finalText += Ogre::StringConverter::toString( timeSinceLast * 1000.0f );
         finalText += " ms\n";
         finalText += "Frame FPS:\t";
         finalText += Ogre::StringConverter::toString( 1.0f / timeSinceLast );
         finalText += "\nAvg time:\t";
-        finalText += Ogre::StringConverter::toString( frameStats->getAvgTime() );
+        finalText += Ogre::StringConverter::toString( frameStats->getRollingAverage() * 1000.0 );
         finalText += " ms\n";
         finalText += "Avg FPS:\t";
-        finalText += Ogre::StringConverter::toString( 1000.0f / frameStats->getAvgTime() );
+        finalText += Ogre::StringConverter::toString( frameStats->getRollingAverageFps() );
         finalText += "\n\nPress F1 to toggle help";
+#ifdef AUTO_TESTING
+        frameCount++;
+        if( frameCount > maxFrames )
+        {
+            std::string filename = "benchmark_" + sampleName + +".csv";
 
+            Ogre::String rsName = mGraphicsSystem->getRoot()->getRenderSystem()->getName();
+            float avgFps = frameStats->getRollingAverageFps();
+            float avgMs = frameStats->getRollingAverage() * 1000.0f;
+
+            std::ofstream out( filename.c_str(), std::ios::app );
+            if( out.is_open() )
+            {
+                out << "\"" << sampleName << "\"," << "\"" << rsName << "\"," << avgFps << "," << avgMs
+                    << "\n";
+                out.close();
+                std::cout << "Logged benchmark: " << sampleName << " [" << rsName << "] - " << avgFps
+                          << " FPS, " << avgMs << " ms" << std::endl;
+            }
+            else
+            {
+                std::cerr << "Could not open benchmark results file: " << filename << std::endl;
+            }
+
+            mGraphicsSystem->deinitialize();
+            exit( 0 );
+        }
+#endif
         outText.swap( finalText );
 
         mDebugText->setCaption( finalText );
@@ -113,7 +146,7 @@ namespace Demo
     {
         if( mDisplayHelpMode != 0 )
         {
-            //Show FPS
+            // Show FPS
             Ogre::String finalText;
             generateDebugText( timeSinceLast, finalText );
             mDebugText->setCaption( finalText );
@@ -123,6 +156,27 @@ namespace Demo
         if( mCameraController )
             mCameraController->update( timeSinceLast );
     }
+//-----------------------------------------------------------------------------------
+#ifdef AUTO_TESTING
+    void TutorialGameState::setSampleName( std::string newSampleName ) { sampleName = newSampleName; }
+
+    void TutorialGameState::setFrameCount( std::string frames )
+    {
+        try
+        {
+            int parsedFrames = std::stoi( frames );
+            maxFrames = parsedFrames;
+        }
+        catch( const std::invalid_argument &e )
+        {
+            throw std::runtime_error( "Invalid input: '" + frames + "' is not a valid integer." );
+        }
+        catch( const std::out_of_range &e )
+        {
+            throw std::runtime_error( "Input out of range: '" + frames + "' cannot fit into an int." );
+        }
+    }
+#endif
     //-----------------------------------------------------------------------------------
     void TutorialGameState::keyPressed( const SDL_KeyboardEvent &arg )
     {
@@ -137,19 +191,21 @@ namespace Demo
     //-----------------------------------------------------------------------------------
     void TutorialGameState::keyReleased( const SDL_KeyboardEvent &arg )
     {
-        if( arg.keysym.scancode == SDL_SCANCODE_F1 && (arg.keysym.mod & ~(KMOD_NUM|KMOD_CAPS)) == 0 )
+        if( arg.keysym.scancode == SDL_SCANCODE_F1 &&
+            ( arg.keysym.mod & ~( KMOD_NUM | KMOD_CAPS ) ) == 0 )
         {
-            mDisplayHelpMode = (mDisplayHelpMode + 1) % mNumDisplayHelpModes;
+            mDisplayHelpMode = ( mDisplayHelpMode + 1 ) % mNumDisplayHelpModes;
 
             Ogre::String finalText;
             generateDebugText( 0, finalText );
             mDebugText->setCaption( finalText );
             mDebugTextShadow->setCaption( finalText );
         }
-        else if( arg.keysym.scancode == SDL_SCANCODE_F1 && (arg.keysym.mod & (KMOD_LCTRL|KMOD_RCTRL)) )
+        else if( arg.keysym.scancode == SDL_SCANCODE_F1 &&
+                 ( arg.keysym.mod & ( KMOD_LCTRL | KMOD_RCTRL ) ) )
         {
-            //Hot reload of PBS shaders. We need to clear the microcode cache
-            //to prevent using old compiled versions.
+            // Hot reload of PBS shaders. We need to clear the microcode cache
+            // to prevent using old compiled versions.
             Ogre::Root *root = mGraphicsSystem->getRoot();
             Ogre::HlmsManager *hlmsManager = root->getHlmsManager();
 
@@ -157,9 +213,10 @@ namespace Demo
             Ogre::GpuProgramManager::getSingleton().clearMicrocodeCache();
             hlms->reloadFrom( hlms->getDataFolder() );
         }
-        else if( arg.keysym.scancode == SDL_SCANCODE_F2  && (arg.keysym.mod & (KMOD_LCTRL|KMOD_RCTRL)) )
+        else if( arg.keysym.scancode == SDL_SCANCODE_F2 &&
+                 ( arg.keysym.mod & ( KMOD_LCTRL | KMOD_RCTRL ) ) )
         {
-            //Hot reload of Unlit shaders.
+            // Hot reload of Unlit shaders.
             Ogre::Root *root = mGraphicsSystem->getRoot();
             Ogre::HlmsManager *hlmsManager = root->getHlmsManager();
 
@@ -167,9 +224,10 @@ namespace Demo
             Ogre::GpuProgramManager::getSingleton().clearMicrocodeCache();
             hlms->reloadFrom( hlms->getDataFolder() );
         }
-        else if( arg.keysym.scancode == SDL_SCANCODE_F3 && (arg.keysym.mod & (KMOD_LCTRL|KMOD_RCTRL)) )
+        else if( arg.keysym.scancode == SDL_SCANCODE_F3 &&
+                 ( arg.keysym.mod & ( KMOD_LCTRL | KMOD_RCTRL ) ) )
         {
-            //Hot reload of Compute shaders.
+            // Hot reload of Compute shaders.
             Ogre::Root *root = mGraphicsSystem->getRoot();
             Ogre::HlmsManager *hlmsManager = root->getHlmsManager();
 
@@ -177,9 +235,10 @@ namespace Demo
             Ogre::GpuProgramManager::getSingleton().clearMicrocodeCache();
             hlms->reloadFrom( hlms->getDataFolder() );
         }
-        else if( arg.keysym.scancode == SDL_SCANCODE_F5 && (arg.keysym.mod & (KMOD_LCTRL|KMOD_RCTRL)) )
+        else if( arg.keysym.scancode == SDL_SCANCODE_F5 &&
+                 ( arg.keysym.mod & ( KMOD_LCTRL | KMOD_RCTRL ) ) )
         {
-            //Force device reelection
+            // Force device reelection
             Ogre::Root *root = mGraphicsSystem->getRoot();
             root->getRenderSystem()->validateDevice( true );
         }
@@ -202,4 +261,4 @@ namespace Demo
 
         GameState::mouseMoved( arg );
     }
-}
+}  // namespace Demo

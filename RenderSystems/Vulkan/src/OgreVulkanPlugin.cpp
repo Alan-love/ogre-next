@@ -27,6 +27,8 @@ Copyright (c) 2000-2014 Torus Knot Software Ltd
 */
 
 #include "OgreVulkanPlugin.h"
+
+#include "OgreAbiUtils.h"
 #include "OgreRoot.h"
 
 namespace Ogre
@@ -37,9 +39,9 @@ namespace Ogre
     //---------------------------------------------------------------------
     const String &VulkanPlugin::getName() const { return sPluginName; }
     //---------------------------------------------------------------------
-    void VulkanPlugin::install()
+    void VulkanPlugin::install( const NameValuePairList *options )
     {
-        mRenderSystem = OGRE_NEW VulkanRenderSystem();
+        mRenderSystem = OGRE_NEW VulkanRenderSystem( options );
 
         Root::getSingleton().addRenderSystem( mRenderSystem );
     }
@@ -59,4 +61,6 @@ namespace Ogre
         OGRE_DELETE mRenderSystem;
         mRenderSystem = 0;
     }
+    //---------------------------------------------------------------------
+    void VulkanPlugin::getAbiCookie( AbiCookie &outAbiCookie ) { outAbiCookie = generateAbiCookie(); }
 }  // namespace Ogre

@@ -20,6 +20,7 @@ def getMercurialBranchName():
 	exitCode = process.wait()
 
 	if exitCode == 0:
+		output = output.decode()
 		branchName = output.replace( '\n', '' )
 		return branchName
 	else:
@@ -32,6 +33,7 @@ def getGitBranchName():
 	exitCode = process.wait()
 
 	if exitCode == 0:
+		output = output.decode()
 		branchName = output.replace( '\n', '' )
 		return branchName
 	else:
@@ -69,18 +71,17 @@ print( 'Generating scripts for Windows' )
 
 generators = \
 [
+	'Visual Studio 17 2022',
 	'Visual Studio 16 2019',
 	'Visual Studio 15 2017',
 	'Visual Studio 14 2015',
-	'Visual Studio 12 2013',
-	'Visual Studio 11 2012',
-	'Visual Studio 10 2010',
-	'Visual Studio 9 2008'
+	'Visual Studio 12 2013'
 ]
 
 platforms = \
 [
 	'Win32',
+	'ARM64',
 	'x64'
 ]
 
@@ -101,7 +102,6 @@ print( 'Generating scripts for Linux' )
 
 cppVersions = \
 [
-	98,
 	11,
 	0
 ]

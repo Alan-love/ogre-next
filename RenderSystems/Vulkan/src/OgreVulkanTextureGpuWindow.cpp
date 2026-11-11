@@ -47,7 +47,7 @@ namespace Ogre
     VulkanTextureGpuWindow::VulkanTextureGpuWindow(
         GpuPageOutStrategy::GpuPageOutStrategy pageOutStrategy, VaoManager *vaoManager, IdString name,
         uint32 textureFlags, TextureTypes::TextureTypes initialType, TextureGpuManager *textureManager,
-        VulkanWindow *window ) :
+        VulkanWindowSwapChainBased *window ) :
         VulkanTextureGpuRenderTarget( pageOutStrategy, vaoManager, name, textureFlags, initialType,
                                       textureManager ),
         mWindow( window ),
@@ -74,15 +74,16 @@ namespace Ogre
         return mWindow->getSwapchainImage( idx );
     }
     //-----------------------------------------------------------------------------------
-    size_t VulkanTextureGpuWindow::getWindowNumSurfaces() const
-    {
-        return mWindow->getNumSwapchains();
-    }
+    size_t VulkanTextureGpuWindow::getWindowNumSurfaces() const { return mWindow->getNumSwapchains(); }
     //-----------------------------------------------------------------------------------
     void VulkanTextureGpuWindow::createInternalResourcesImpl()
     {
         if( mSampleDescription.isMultisample() )
             createMsaaSurface();
+
+        OGRE_ASSERT_LOW( !PixelFormatGpuUtils::isDepth( mPixelFormat ) &&
+                         !PixelFormatGpuUtils::isStencil( mPixelFormat ) );
+        mNextLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
     //-----------------------------------------------------------------------------------
     void VulkanTextureGpuWindow::destroyInternalResourcesImpl()
@@ -113,8 +114,6 @@ namespace Ogre
         if( name == "Window" )
             *static_cast<Window **>( pData ) = mWindow;
     }
-    //-----------------------------------------------------------------------------------
-    bool VulkanTextureGpuWindow::isOpenGLRenderWindow() const { return true; }
     //-----------------------------------------------------------------------------------
     void VulkanTextureGpuWindow::_setToDisplayDummyTexture() {}
     //-----------------------------------------------------------------------------------

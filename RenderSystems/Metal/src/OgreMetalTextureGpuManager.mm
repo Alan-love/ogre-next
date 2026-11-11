@@ -40,6 +40,7 @@ THE SOFTWARE.
 #include "Vao/OgreMetalVaoManager.h"
 
 #include "OgreException.h"
+#include "OgreRoot.h"
 
 namespace Ogre
 {
@@ -58,35 +59,31 @@ namespace Ogre
         desc.sampleCount = 1u;
         desc.usage = MTLTextureUsageShaderRead;
 
-        const MTLTextureType textureTypes[] = {
-            MTLTextureType2D,
-            MTLTextureType1D,
-            MTLTextureType1DArray,
-            MTLTextureType2D,
-            MTLTextureType2DArray,
-            MTLTextureTypeCube,
+        const MTLTextureType textureTypes[] = { MTLTextureType2D,       //
+                                                MTLTextureType1D,       //
+                                                MTLTextureType1DArray,  //
+                                                MTLTextureType2D,       //
+                                                MTLTextureType2DArray,  //
+                                                MTLTextureTypeCube,     //
 #if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
-            MTLTextureTypeCubeArray,
+                                                MTLTextureTypeCubeArray,
 #else
-            MTLTextureTypeCube,
+                                                MTLTextureTypeCube,
 #endif
-            MTLTextureType3D
-        };
+                                                MTLTextureType3D };
 
-        const char *dummyNames[] = {
-            "Dummy Unknown (2D)",
-            "Dummy 1D 4x1",
-            "Dummy 1DArray 4x1",
-            "Dummy 2D 4x4",
-            "Dummy 2DArray 4x4x1",
-            "Dummy Cube 4x4",
+        const char *dummyNames[] = { "Dummy Unknown (2D)",   //
+                                     "Dummy 1D 4x1",         //
+                                     "Dummy 1DArray 4x1",    //
+                                     "Dummy 2D 4x4",         //
+                                     "Dummy 2DArray 4x4x1",  //
+                                     "Dummy Cube 4x4",
 #if OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
-            "Dummy CubeArray 4x4x1",
+                                     "Dummy CubeArray 4x4x1",
 #else
-            "Dummy CubeArray 4x4x1 (Emulated w/ Cube)",
+                                     "Dummy CubeArray 4x4x1 (Emulated w/ Cube)",
 #endif
-            "Dummy 3D 4x4x4"
-        };
+                                     "Dummy 3D 4x4x4" };
 
         // Must be large enough to hold the biggest transfer we'll do.
         uint8 c_whiteData[4 * 4 * 6 * 4];
@@ -112,7 +109,7 @@ namespace Ogre
                 OGRE_EXCEPT( Exception::ERR_RENDERINGAPI_ERROR, "Out of GPU memory or driver refused.",
                              "MetalTextureGpuManager::MetalTextureGpuManager" );
             }
-            mBlankTexture[i].label = [NSString stringWithUTF8String:dummyNames[i]];
+            mBlankTexture[i].label = @( dummyNames[i] );
 
             if( i == TextureTypes::TypeCube || i == TextureTypes::TypeCubeArray )
             {
@@ -157,11 +154,12 @@ namespace Ogre
                                                TextureTypes::Type2D, this, window );
     }
     //-----------------------------------------------------------------------------------
-    TextureGpu *MetalTextureGpuManager::createWindowDepthBuffer()
+    TextureGpu *MetalTextureGpuManager::createWindowDepthBuffer( const bool bMemoryLess )
     {
         return OGRE_NEW MetalTextureGpuRenderTarget(
             GpuPageOutStrategy::Discard, mVaoManager, "RenderWindow DepthBuffer",
             TextureFlags::NotTexture | TextureFlags::RenderToTexture |
+                ( ( bMemoryLess && allowMemoryless() ) ? TextureFlags::TilerMemoryless : 0 ) |
                 TextureFlags::RenderWindowSpecific | TextureFlags::DiscardableContent,
             TextureTypes::Type2D, this );
     }
@@ -252,4 +250,4 @@ namespace Ogre
 
         return true;
     }
-}
+}  // namespace Ogre

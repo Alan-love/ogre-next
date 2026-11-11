@@ -16,7 +16,7 @@
 if (WIN32 OR APPLE)
   set(OGRE_DOCS_PATH "Docs")
 elseif (UNIX)
-  set(OGRE_DOCS_PATH "share/OGRE/docs")
+  set(OGRE_DOCS_PATH "share/${OGRE_NEXT_PREFIX}/docs")
 endif ()
   
 # Build and install API documentation if doxygen is available
@@ -30,15 +30,26 @@ if(DOXYGEN_FOUND)
     endif ()
     
 	file(GLOB MANUAL
-			${OGRE_SOURCE_DIR}/Docs/src/manual/*.md
+		${OGRE_SOURCE_DIR}/Docs/src/manual/*.md
+			${OGRE_SOURCE_DIR}/Docs/src/manual/Introduction/*.md
+			${OGRE_SOURCE_DIR}/Docs/src/manual/Migrating/*.md
+			${OGRE_SOURCE_DIR}/Docs/src/manual/Performance/*.md
+			${OGRE_SOURCE_DIR}/Docs/src/manual/Plugins/*.md
+			${OGRE_SOURCE_DIR}/Docs/src/manual/Rendering/*.md
+			${OGRE_SOURCE_DIR}/Docs/src/manual/Scripts/*.md
 			${OGRE_SOURCE_DIR}/Docs/src/SettingUpOgre/*.md
 			${OGRE_SOURCE_DIR}/Docs/src/UsingOgre/*.md
 		)
-    
+
+	file(GLOB COMPONENTS ${OGRE_SOURCE_DIR}/Components/*/include ${OGRE_SOURCE_DIR}/Components/Hlms/*/include)
+	file(GLOB PLUGINS ${OGRE_SOURCE_DIR}/PlugIns/*/include)
+	file(GLOB SAMPLES ${OGRE_SOURCE_DIR}/Samples/Media/particle/*.particle)
+
     set(CMAKE_DOXYGEN_INPUT_LIST 
-        \"${OGRE_SOURCE_DIR}/OgreMain
-        ${OGRE_SOURCE_DIR}/Components
-        ${OGRE_SOURCE_DIR}/Plugins
+        \"${OGRE_SOURCE_DIR}/OgreMain/include
+        ${COMPONENTS}
+        ${PLUGINS}
+        ${OGRE_SOURCE_DIR}/PlugIns
         ${OGRE_SOURCE_DIR}/RenderSystems
         ${OGRE_SOURCE_DIR}/Docs/src/apimainpage.md
         ${MANUAL}\")

@@ -16,10 +16,11 @@
 if(WIN32 OR APPLE)
 	set(OGRE_CMAKE_DIR "CMake")
 else()
-	set(OGRE_CMAKE_DIR "${OGRE_LIB_DIRECTORY}/OGRE/cmake")
+	set(OGRE_CMAKE_DIR "${OGRE_LIB_DIRECTORY}/${OGRE_NEXT_PREFIX}/cmake")
 endif()
 
 set(INST_FILES
+  Packages/FindDearImgui.cmake
   Packages/FindRapidjson.cmake
   Packages/FindRemotery.cmake
   Packages/FindSDL2.cmake
@@ -43,10 +44,8 @@ if (OGRE_CONFIG_THREAD_PROVIDER STREQUAL "tbb")
 endif ()
 
 set(STATIC_INST_FILES
-  Packages/FindDirectX.cmake
   Packages/FindFreeImage.cmake
   Packages/FindFreetype.cmake
-  Packages/FindOpenGLES.cmake
   Packages/FindOpenGLES2.cmake
   Packages/FindZLIB.cmake
   Packages/FindZZip.cmake

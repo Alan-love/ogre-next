@@ -42,7 +42,7 @@ namespace Ogre
         mVboPoolIdx( vboPoolIdx ),
         mVboName( vboName ),
         mMappedPtr( 0 ),
-        mUnmapTicket( (size_t)~0 ),
+        mUnmapTicket( std::numeric_limits<size_t>::max() ),
         mDynamicBuffer( dynamicBuffer )
     {
     }
@@ -141,6 +141,15 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     size_t MetalBufferInterface::advanceFrame( bool bAdvanceFrame )
     {
+        if( mBuffer->mBufferType == BT_DEFAULT_SHARED )
+        {
+            if( bAdvanceFrame )
+            {
+                mBuffer->mFinalBufferStart = mBuffer->mInternalBufferStart;
+            }
+            return 0;
+        }
+
         MetalVaoManager *vaoManager = static_cast<MetalVaoManager *>( mBuffer->mVaoManager );
         size_t dynamicCurrentFrame = mBuffer->mFinalBufferStart - mBuffer->mInternalBufferStart;
         dynamicCurrentFrame /= mBuffer->_getInternalNumElements();
@@ -158,6 +167,12 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     void MetalBufferInterface::regressFrame()
     {
+        if( mBuffer->mBufferType == BT_DEFAULT_SHARED )
+        {
+            mBuffer->mFinalBufferStart = mBuffer->mInternalBufferStart;
+            return;
+        }
+
         MetalVaoManager *vaoManager = static_cast<MetalVaoManager *>( mBuffer->mVaoManager );
         size_t dynamicCurrentFrame = mBuffer->mFinalBufferStart - mBuffer->mInternalBufferStart;
         dynamicCurrentFrame /= mBuffer->_getInternalNumElements();
@@ -196,4 +211,4 @@ namespace Ogre
                                    size:sizeBytes];
         }
     }
-}
+}  // namespace Ogre

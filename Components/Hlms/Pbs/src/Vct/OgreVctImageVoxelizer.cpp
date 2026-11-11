@@ -275,7 +275,7 @@ namespace Ogre
                 "VctImageVoxelizer" + StringConverter::toString( getId() ) + "/Albedo",
                 GpuPageOutStrategy::Discard, texFlags, TextureTypes::Type3D );
 
-            texFlags &= ~( uint32 )( TextureFlags::RenderToTexture | TextureFlags::AllowAutomipmaps );
+            texFlags &= ~(uint32)( TextureFlags::RenderToTexture | TextureFlags::AllowAutomipmaps );
 
             mEmissiveVox = mTextureGpuManager->createTexture(
                 "VctImageVoxelizer" + StringConverter::toString( getId() ) + "/Emissive",
@@ -331,7 +331,7 @@ namespace Ogre
             "VctImageVoxelizer" + StringConverter::toString( getId() ) + "/AlbedoALT",
             GpuPageOutStrategy::Discard, texFlags, TextureTypes::Type3D );
 
-        texFlags &= ~( uint32 )( TextureFlags::RenderToTexture | TextureFlags::AllowAutomipmaps );
+        texFlags &= ~(uint32)( TextureFlags::RenderToTexture | TextureFlags::AllowAutomipmaps );
 
         mEmissiveVoxAlt = mTextureGpuManager->createTexture(
             "VctImageVoxelizer" + StringConverter::toString( getId() ) + "/EmissiveALT",
@@ -499,8 +499,7 @@ namespace Ogre
             const Aabb localAabb = item->getLocalAabb();  // Must be local, not world
 
             Matrix4 worldToUvw;
-
-            worldToUvw.makeInverseTransform( itemPos + localAabb.getMinimum() * itemScale,
+            worldToUvw.makeInverseTransform( itemPos + itemRot * ( localAabb.getMinimum() * itemScale ),
                                              itemScale * localAabb.getSize(), itemRot );
 
             if( lastMesh != item->getMesh().get() )
@@ -529,9 +528,9 @@ namespace Ogre
                 mBatches.back().textures.push_back( cacheEntry.normalVox );
                 mBatches.back().textures.push_back( cacheEntry.emissiveVox );
 
-                meshResolution =
-                    Vector3( cacheEntry.albedoVox->getWidth(), cacheEntry.albedoVox->getHeight(),
-                             cacheEntry.albedoVox->getDepthOrSlices() );
+                meshResolution = Vector3( (Real)cacheEntry.albedoVox->getWidth(),
+                                          (Real)cacheEntry.albedoVox->getHeight(),
+                                          (Real)cacheEntry.albedoVox->getDepthOrSlices() );
             }
 
             const Vector3 invMeshCellSize = meshResolution / worldAabb.getSize();
@@ -672,7 +671,8 @@ namespace Ogre
 
         const Vector3 voxelOrigin = mRegionToVoxelize.getMinimum();
         const Vector3 octantCellSize =
-            mRegionToVoxelize.getSize() / Vector3( numOctantsX, numOctantsY, numOctantsZ );
+            mRegionToVoxelize.getSize() /
+            Vector3( (Real)numOctantsX, (Real)numOctantsY, (Real)numOctantsZ );
 
         for( uint32 x = 0u; x < numOctantsX; ++x )
         {
@@ -684,7 +684,7 @@ namespace Ogre
                 {
                     octant.z = z * octant.depth;
 
-                    Vector3 octantOrigin = Vector3( x, y, z ) * octantCellSize;
+                    Vector3 octantOrigin = Vector3( (Real)x, (Real)y, (Real)z ) * octantCellSize;
                     octantOrigin += voxelOrigin;
                     octant.region.setExtents( octantOrigin, octantOrigin + octantCellSize );
                     mOctants.push_back( octant );
@@ -826,9 +826,10 @@ namespace Ogre
             const Vector3 voxelCellSize = getVoxelCellSize();
             const Vector3 voxelOrigin = getVoxelOrigin();
             octant.region.setExtents(
-                voxelOrigin + voxelCellSize * Vector3( octant.x, octant.y, octant.z ),
-                voxelOrigin + voxelCellSize * Vector3( octant.x + octant.width, octant.y + octant.height,
-                                                       octant.z + octant.depth ) );
+                voxelOrigin + voxelCellSize * Vector3( (Real)octant.x, (Real)octant.y, (Real)octant.z ),
+                voxelOrigin + voxelCellSize * Vector3( Real( octant.x + octant.width ),
+                                                       Real( octant.y + octant.height ),
+                                                       Real( octant.z + octant.depth ) ) );
 
             mOctants.push_back( octant );
         }
@@ -868,9 +869,10 @@ namespace Ogre
             const Vector3 voxelCellSize = getVoxelCellSize();
             const Vector3 voxelOrigin = getVoxelOrigin();
             octant.region.setExtents(
-                voxelOrigin + voxelCellSize * Vector3( octant.x, octant.y, octant.z ),
-                voxelOrigin + voxelCellSize * Vector3( octant.x + octant.width, octant.y + octant.height,
-                                                       octant.z + octant.depth ) );
+                voxelOrigin + voxelCellSize * Vector3( (Real)octant.x, (Real)octant.y, (Real)octant.z ),
+                voxelOrigin + voxelCellSize * Vector3( Real( octant.x + octant.width ),
+                                                       Real( octant.y + octant.height ),
+                                                       Real( octant.z + octant.depth ) ) );
 
             mOctants.push_back( octant );
         }
@@ -919,9 +921,10 @@ namespace Ogre
             const Vector3 voxelCellSize = getVoxelCellSize();
             const Vector3 voxelOrigin = getVoxelOrigin();
             octant.region.setExtents(
-                voxelOrigin + voxelCellSize * Vector3( octant.x, octant.y, octant.z ),
-                voxelOrigin + voxelCellSize * Vector3( octant.x + octant.width, octant.y + octant.height,
-                                                       octant.z + octant.depth ) );
+                voxelOrigin + voxelCellSize * Vector3( (Real)octant.x, (Real)octant.y, (Real)octant.z ),
+                voxelOrigin + voxelCellSize * Vector3( Real( octant.x + octant.width ),
+                                                       Real( octant.y + octant.height ),
+                                                       Real( octant.z + octant.depth ) ) );
 
             mOctants.push_back( octant );
         }

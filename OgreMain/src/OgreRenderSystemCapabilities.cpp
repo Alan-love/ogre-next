@@ -321,6 +321,9 @@ namespace Ogre {
             " * Hardware Atomic Counters: "
             + StringConverter::toString(hasCapability(RSC_ATOMIC_COUNTERS), true));
 
+        pLog->logMessage( " * Shader 16-bit floating point (half): " +
+                          StringConverter::toString( hasCapability( RSC_SHADER_FLOAT16 ), true ) );
+
         if( hasCapability( RSC_COMPUTE_PROGRAM ) )
         {
             pLog->logMessage(
@@ -375,12 +378,12 @@ namespace Ogre {
         GPUVendor ret = GPU_UNKNOWN;
         String cmpString = vendorString;
         StringUtil::toLowerCase(cmpString);
-        for (int i = 0; i < GPU_VENDOR_COUNT; ++i)
+        for( size_t i = 0; i < GPU_VENDOR_COUNT; ++i )
         {
             // case insensitive (lower case)
-            if (msGPUVendorStrings[i] == cmpString)
+            if( msGPUVendorStrings[i] == cmpString )
             {
-                ret = static_cast<GPUVendor>(i);
+                ret = static_cast<GPUVendor>( i );
                 break;
             }
         }
@@ -419,6 +422,7 @@ namespace Ogre {
             msGPUVendorStrings[GPU_MOZILLA] = "mozilla";
             msGPUVendorStrings[GPU_WEBKIT] = "webkit";
             msGPUVendorStrings[GPU_IMGTEC] = "powervr";
+            msGPUVendorStrings[GPU_SAMSUNG] = "samsung";
         }
     }
     //---------------------------------------------------------------------

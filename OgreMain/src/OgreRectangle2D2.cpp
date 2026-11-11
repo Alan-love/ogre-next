@@ -29,15 +29,13 @@ THE SOFTWARE.
 
 #include "OgreRectangle2D2.h"
 
-#include "Vao/OgreStagingBuffer.h"
-#include "Vao/OgreVaoManager.h"
-#include "Vao/OgreVertexArrayObject.h"
-
-#include "OgreSceneManager.h"
-
 #include "OgreHlms.h"
 #include "OgreHlmsManager.h"
 #include "OgreRoot.h"
+#include "OgreSceneManager.h"
+#include "Vao/OgreStagingBuffer.h"
+#include "Vao/OgreVaoManager.h"
+#include "Vao/OgreVertexArrayObject.h"
 
 namespace Ogre
 {
@@ -62,7 +60,9 @@ namespace Ogre
         mRenderables.push_back( this );
     }
     //-----------------------------------------------------------------------------------
-    Rectangle2D::~Rectangle2D()
+    Rectangle2D::~Rectangle2D() { _releaseManualHardwareResources(); }
+    //-----------------------------------------------------------------------------------
+    void Rectangle2D::_releaseManualHardwareResources()
     {
         VaoManager *vaoManager = mManager->getDestinationRenderSystem()->getVaoManager();
 
@@ -90,7 +90,10 @@ namespace Ogre
 
             ++itor;
         }
+        mVaoPerLod->clear();
     }
+    //-----------------------------------------------------------------------------------
+    void Rectangle2D::_restoreManualHardwareResources() { createBuffers(); }
     //-----------------------------------------------------------------------------------
     bool Rectangle2D::isQuad() const { return ( mGeometryFlags & GeometryFlagQuad ) != 0u; }
     //-----------------------------------------------------------------------------------
@@ -138,8 +141,8 @@ namespace Ogre
 
         const BufferType bufferType = getBufferType();
 
-        float *vertexData = reinterpret_cast<float *>( OGRE_MALLOC_SIMD(
-            sizeof( float ) * bytesPerVertex * numVertices, Ogre::MEMCATEGORY_GEOMETRY ) );
+        float *vertexData = reinterpret_cast<float *>(
+            OGRE_MALLOC_SIMD( bytesPerVertex * numVertices, Ogre::MEMCATEGORY_GEOMETRY ) );
         FreeOnDestructor dataPtr( vertexData );
         if( !isHollowFullscreenRect() )
             fillBuffer( vertexData, numVertices );
@@ -172,8 +175,9 @@ namespace Ogre
         Vector2 posCenter[2] = { mPosition, mSize };
 
         const size_t numIterations = isStereo() ? 2u : 1u;
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_LOW
         const float *vertexDataStart = vertexData;
-
+#endif
         for( size_t i = 0u; i < numIterations; ++i )
         {
             posCenter[i].y = -posCenter[i].y;
@@ -219,13 +223,14 @@ namespace Ogre
             *vertexData++ = radius + posCenter[i].y;
         }
 
-        OGRE_ASSERT_LOW( ( size_t )( vertexData - vertexDataStart ) == maxElements * 2u );
+        OGRE_ASSERT_LOW( (size_t)( vertexData - vertexDataStart ) == maxElements * 2u );
     }
     //-----------------------------------------------------------------------------------
     void Rectangle2D::fillBuffer( float *RESTRICT_ALIAS vertexData, size_t maxElements )
     {
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_LOW
         const float *vertexDataStart = vertexData;
-
+#endif
         const size_t numIterations = isStereo() ? 2u : 1u;
         const bool bHasNormals = hasNormals();
 
@@ -279,7 +284,7 @@ namespace Ogre
             }
         }
 
-        OGRE_ASSERT_LOW( ( size_t )( vertexData - vertexDataStart ) ==
+        OGRE_ASSERT_LOW( (size_t)( vertexData - vertexDataStart ) ==
                          maxElements * ( hasNormals() ? 7u : 4u ) );
     }
     //-----------------------------------------------------------------------------------
@@ -363,10 +368,7 @@ namespace Ogre
         mChanged = false;
     }
     //-----------------------------------------------------------------------------------
-    const String &Rectangle2D::getMovableType() const
-    {
-        return Rectangle2DFactory::FACTORY_TYPE_NAME;
-    }
+    const String &Rectangle2D::getMovableType() const { return Rectangle2DFactory::FACTORY_TYPE_NAME; }
     //-----------------------------------------------------------------------------------
     const LightList &Rectangle2D::getLights() const
     {

@@ -28,6 +28,7 @@ Copyright (c) 2000-present Torus Knot Software Ltd
 
 #include "OgreVulkanDiscardBufferManager.h"
 
+#include "OgreException.h"
 #include "OgreStringConverter.h"
 #include "OgreVulkanDevice.h"
 #include "OgreVulkanUtils.h"
@@ -39,16 +40,34 @@ namespace Ogre
         mDevice( device ),
         mVaoManager( vaoManager )
     {
+        createVkResources();
+    }
+
+    VulkanDiscardBufferManager::~VulkanDiscardBufferManager() { destroyVkResources(); }
+
+    void VulkanDiscardBufferManager::notifyDeviceLost() { destroyVkResources(); }
+
+    void VulkanDiscardBufferManager::notifyDeviceRestored( unsigned pass )
+    {
+        if( pass == 0 )
+            createVkResources();
+    }
+
+    void VulkanDiscardBufferManager::createVkResources()
+    {
         const size_t defaultCapacity = 4 * 1024 * 1024;
 
-        VulkanVaoManager *vaoMgr = static_cast<VulkanVaoManager *>( vaoManager );
+        VulkanVaoManager *vaoMgr = static_cast<VulkanVaoManager *>( mVaoManager );
         mBuffer = vaoMgr->allocateRawBuffer( VulkanVaoManager::CPU_WRITE_PERSISTENT, defaultCapacity );
 
         mFreeBlocks.push_back( VulkanVaoManager::Block( 0, defaultCapacity ) );
     }
 
-    VulkanDiscardBufferManager::~VulkanDiscardBufferManager()
+    void VulkanDiscardBufferManager::destroyVkResources()
     {
+        mFreeBlocks.clear();
+        mUnsafeBlocks.clear();
+
         VulkanDiscardBufferVec::const_iterator itor = mDiscardBuffers.begin();
         VulkanDiscardBufferVec::const_iterator endt = mDiscardBuffers.end();
 
@@ -57,7 +76,7 @@ namespace Ogre
         mDiscardBuffers.clear();
 
         VulkanVaoManager *vaoManager = static_cast<VulkanVaoManager *>( mVaoManager );
-        vaoManager->deallocateRawBuffer( mBuffer );
+        vaoManager->deallocateRawBuffer( mBuffer, false );
     }
 
     void VulkanDiscardBufferManager::growToFit( size_t extraBytes,
@@ -95,7 +114,7 @@ namespace Ogre
                     region.srcOffset = ( *itor )->getBlockStart() + oldBuffer.mInternalBufferStart;
                     region.dstOffset = ( *itor )->getBlockStart() + mBuffer.mInternalBufferStart;
                     region.size = ( *itor )->getBlockSize();
-                    vkCmdCopyBuffer( mDevice->mGraphicsQueue.mCurrentCmdBuffer, oldBuffer.mVboName,
+                    vkCmdCopyBuffer( mDevice->mGraphicsQueue.getCurrentCmdBuffer(), oldBuffer.mVboName,
                                      mBuffer.mVboName, 1u, &region );
                     ( *itor )->mLastFrameUsed = currentFrame;
                 }
@@ -109,7 +128,7 @@ namespace Ogre
         }
 
         LogManager::getSingleton().logMessage(
-            "PERFORMANCE WARNING: MetalDiscardBufferManager::growToFit must stall."
+            "PERFORMANCE WARNING: VulkanDiscardBufferManager::growToFit must stall."
             "Consider increasing the default discard capacity to at least " +
             StringConverter::toString( newCapacity ) + " bytes" );
 
@@ -117,7 +136,7 @@ namespace Ogre
         // write to the same resource even if the regions don't overlap.
         mDevice->stall();
 
-        vaoMagr->deallocateRawBuffer( oldBuffer );
+        vaoMagr->deallocateRawBuffer( oldBuffer, true );
 
         mFreeBlocks.push_back( VulkanVaoManager::Block( oldCapacity, newCapacity - oldCapacity ) );
 

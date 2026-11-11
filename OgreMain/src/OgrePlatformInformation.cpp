@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "OgreStableHeaders.h"
 
 #include "OgrePlatformInformation.h"
+
 #include "OgreLogManager.h"
 #include "OgreStringConverter.h"
 #include "OgreString.h"
@@ -151,8 +152,10 @@ namespace Ogre {
 
     //---------------------------------------------------------------------
     // Performs CPUID instruction with 'query', fill the results, and return value of eax.
-    static uint _performCpuid(int query, CpuidResult& result)
+    static uint _performCpuid(uint32 _query, CpuidResult& result)
     {
+        int32 query;
+        memcpy( &query, &_query, sizeof( query ) );
 #if OGRE_COMPILER == OGRE_COMPILER_MSVC
     #if _MSC_VER >= 1400 
         int CPUInfo[4];
@@ -299,9 +302,9 @@ namespace Ogre {
 #define CPUID_EXT_FAMILY_ID_MASK    0x0F00000   // EAX[23:20] - Bit 23 thru 20 contains extended family processor id
 #define CPUID_PENTIUM4_ID           0x0F00      // Pentium 4 family processor id
 
-#define CPUID_EXT_3DNOW             (1<<31)
-#define CPUID_EXT_AMD_3DNOWEXT      (1<<30)
-#define CPUID_EXT_AMD_MMXEXT        (1<<22)
+#define CPUID_EXT_3DNOW             (1u<<31u)
+#define CPUID_EXT_AMD_3DNOWEXT      (1u<<30u)
+#define CPUID_EXT_AMD_MMXEXT        (1u<<22u)
 
         uint features = 0;
 
@@ -536,22 +539,21 @@ namespace Ogre {
         unsigned arm64SubtypesCount = sizeof(arm64Subtypes) / sizeof(arm64Subtypes[0]);
         unsigned arm64_32SubtypesCount = sizeof(arm64_32Subtypes) / sizeof(arm64_32Subtypes[0]);
 
-        struct Helper{
-            static const char* getName(const char** names, unsigned count, unsigned idx){
-                return idx < count && names[idx] ? names[idx] : names[0];
-            }
+        auto getCpuName = [](const char** names, unsigned count, cpu_subtype_t cpusubtype){
+            unsigned idx = (unsigned)cpusubtype & ~CPU_SUBTYPE_MASK;
+            return idx < count && names[idx] ? names[idx] : names[0];
         };
 
         switch(cputype)
         {
             case CPU_TYPE_ARM:
-                cpuID = Helper::getName(armSubtypes, armSubtypesCount, cpusubtype);
+                cpuID = getCpuName(armSubtypes, armSubtypesCount, cpusubtype);
                 break;
             case CPU_TYPE_ARM64:
-                cpuID = Helper::getName(arm64Subtypes, arm64SubtypesCount, cpusubtype & ~CPU_SUBTYPE_MASK);
+                cpuID = getCpuName(arm64Subtypes, arm64SubtypesCount, cpusubtype);
                 break;
             case CPU_TYPE_ARM64_32:
-                cpuID = Helper::getName(arm64_32Subtypes, arm64_32SubtypesCount, cpusubtype & ~CPU_SUBTYPE_MASK);
+                cpuID = getCpuName(arm64_32Subtypes, arm64_32SubtypesCount, cpusubtype);
                 break;
             default:
                 cpuID = "Unknown ARM";
@@ -660,7 +662,7 @@ namespace Ogre {
         uint32 numLogicalCores = 0;
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_LINUX || OGRE_PLATFORM == OGRE_PLATFORM_ANDROID || OGRE_PLATFORM == OGRE_PLATFORM_FREEBSD
-        int logicalCores = (uint)sysconf( _SC_NPROCESSORS_ONLN );
+        int logicalCores = (int)sysconf( _SC_NPROCESSORS_ONLN );
 
         if( logicalCores > 0 )
             numLogicalCores = (uint32)logicalCores;

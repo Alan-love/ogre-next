@@ -26,20 +26,21 @@ THE SOFTWARE.
 -----------------------------------------------------------------------------
 */
 
-#include "OgrePrerequisites.h"
 #include <iostream>
+#include "OgrePrerequisites.h"
 
 #include "System/MainEntryPoints.h"
 
 #include "System/Desktop/UnitTesting.h"
+#include "TutorialGameState.h"
 
+#include "GameState.h"
 #include "GraphicsSystem.h"
 #include "LogicSystem.h"
-#include "GameState.h"
 #include "SdlInputHandler.h"
 
-#include "OgreWindow.h"
 #include "OgreTimer.h"
+#include "OgreWindow.h"
 
 #include "Threading/OgreThreads.h"
 
@@ -70,9 +71,21 @@ int Demo::MainEntryPoints::mainAppSingleThreaded( int argc, const char *argv[] )
     GameState *logicGameState = 0;
     LogicSystem *logicSystem = 0;
 
-    MainEntryPoints::createSystems( &graphicsGameState, &graphicsSystem,
-                                    &logicGameState, &logicSystem );
-
+    MainEntryPoints::createSystems( &graphicsGameState, &graphicsSystem, &logicGameState, &logicSystem );
+#ifdef AUTO_TESTING
+    if( argv[1] )
+    {
+        graphicsSystem->setRendererParam( std::string( argv[1] ) );
+    }
+    if( TutorialGameState *tutorial = dynamic_cast<TutorialGameState *>( graphicsGameState ) )
+    {
+        tutorial->setSampleName( std::string( argv[0] ).substr( 2 ) );
+        if( argv[2] )
+        {
+            tutorial->setFrameCount( std::string( argv[2] ) );
+        }
+    }
+#endif
     try
     {
         graphicsSystem->initialize( getWindowTitle() );
@@ -85,10 +98,10 @@ int Demo::MainEntryPoints::mainAppSingleThreaded( int argc, const char *argv[] )
                 logicSystem->deinitialize();
             graphicsSystem->deinitialize();
 
-            MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem,
-                                             logicGameState, logicSystem );
+            MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem, logicGameState,
+                                             logicSystem );
 
-            return 0; //User cancelled config
+            return 0;  // User cancelled config
         }
 
         if( unitTest.getParams().isRecording() )
@@ -104,13 +117,16 @@ int Demo::MainEntryPoints::mainAppSingleThreaded( int argc, const char *argv[] )
         if( logicSystem )
             logicSystem->createScene02();
 
-    #if OGRE_USE_SDL2
-        //Do this after creating the scene for easier the debugging (the mouse doesn't hide itself)
-        SdlInputHandler *inputHandler = graphicsSystem->getInputHandler();
-        inputHandler->setGrabMousePointer( true );
-        inputHandler->setMouseVisible( false );
-        inputHandler->setMouseRelative( true );
-    #endif
+#if OGRE_USE_SDL2
+        if( graphicsSystem->getGrabMousePointerOnStartup() )
+        {
+            // Do this after creating the scene for easier the debugging (the mouse doesn't hide itself).
+            SdlInputHandler *inputHandler = graphicsSystem->getInputHandler();
+            inputHandler->setGrabMousePointer( true );
+            inputHandler->setMouseVisible( false );
+            inputHandler->setMouseRelative( true );
+        }
+#endif
 
         Ogre::Timer timer;
         Ogre::uint64 startTime = timer.getMicroseconds();
@@ -143,13 +159,13 @@ int Demo::MainEntryPoints::mainAppSingleThreaded( int argc, const char *argv[] )
 
             if( !renderWindow->isVisible() )
             {
-                //Don't burn CPU cycles unnecessary when we're minimized.
+                // Don't burn CPU cycles unnecessary when we're minimized.
                 Ogre::Threads::Sleep( 500 );
             }
 
             Ogre::uint64 endTime = timer.getMicroseconds();
-            timeSinceLast = (endTime - startTime) / 1000000.0;
-            timeSinceLast = std::min( 1.0, timeSinceLast ); //Prevent from going haywire.
+            timeSinceLast = double( endTime - startTime ) / 1000000.0;
+            timeSinceLast = std::min( 1.0, timeSinceLast );  // Prevent from going haywire.
             accumulator += timeSinceLast;
             startTime = endTime;
         }
@@ -168,19 +184,19 @@ int Demo::MainEntryPoints::mainAppSingleThreaded( int argc, const char *argv[] )
         }
         graphicsSystem->deinitialize();
 
-        MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem,
-                                         logicGameState, logicSystem );
+        MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem, logicGameState,
+                                         logicSystem );
     }
     catch( Ogre::Exception &e )
     {
-        MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem,
-                                         logicGameState, logicSystem );
+        MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem, logicGameState,
+                                         logicSystem );
         throw e;
     }
     catch( ... )
     {
-        MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem,
-                                         logicGameState, logicSystem );
+        MainEntryPoints::destroySystems( graphicsGameState, graphicsSystem, logicGameState,
+                                         logicSystem );
     }
 
     return 0;

@@ -34,7 +34,7 @@ THE SOFTWARE.
 namespace Ogre
 {
     /** Plugin instance for Vulkan Manager */
-    class VulkanPlugin final : public Plugin
+    class _OgreVulkanExport VulkanPlugin final : public Plugin
     {
     public:
         VulkanPlugin();
@@ -43,7 +43,7 @@ namespace Ogre
         const String &getName() const override;
 
         /// @copydoc Plugin::install
-        void install() override;
+        void install( const NameValuePairList *options ) override;
 
         /// @copydoc Plugin::initialise
         void initialise() override;
@@ -53,6 +53,9 @@ namespace Ogre
 
         /// @copydoc Plugin::uninstall
         void uninstall() override;
+
+        /// @copydoc Plugin::getAbiCookie
+        void getAbiCookie( AbiCookie &outAbiCookie ) override;
 
     protected:
         VulkanRenderSystem *mRenderSystem;

@@ -77,7 +77,6 @@ namespace Ogre
         uint32 mQueueIdx;
 
         VkQueue mQueue;
-        VkCommandBuffer mCurrentCmdBuffer;
 
         VulkanDevice *mOwnerDevice;
 
@@ -101,7 +100,7 @@ namespace Ogre
         VkSemaphoreArray                mGpuWaitSemaphForCurrCmdBuff;
         FastArray<VkPipelineStageFlags> mGpuWaitFlags;
         /// Collection of semaphore we will signal when our queue
-        /// submitted in commitAndNextCommandBuffer is done
+        /// submitted in commitAndNextCommandBuffer is done. Semaphores are owned.
         VkSemaphoreArray                mGpuSignalSemaphForCurrCmdBuff;
         // clang-format on
 
@@ -113,9 +112,10 @@ namespace Ogre
         RefCountedFenceMap mRefCountedFences;
 
     public:
-        FastArray<VulkanWindow *> mWindowsPendingSwap;
+        FastArray<VulkanWindowSwapChainBased *> mWindowsPendingSwap;
 
     protected:
+        VkCommandBuffer mCurrentCmdBuffer;
         FastArray<VkCommandBuffer> mPendingCmds;
 
         VulkanVaoManager *mVaoManager;
@@ -210,6 +210,7 @@ namespace Ogre
         ~VulkanQueue();
 
         void setQueueData( VulkanDevice *owner, QueueFamily family, uint32 familyIdx, uint32 queueIdx );
+        void setExternalQueue( VulkanDevice *owner, QueueFamily family, VkQueue queue );
 
         void init( VkDevice device, VkQueue queue, VulkanRenderSystem *renderSystem );
         void destroy();
@@ -219,6 +220,12 @@ namespace Ogre
         void endCommandBuffer();
 
     public:
+        VkCommandBuffer getCurrentCmdBuffer()
+        {
+            if( !mCurrentCmdBuffer )  // device lost or any other error happens near vkSubmitQueue()
+                checkVkResult( mOwnerDevice, VK_ERROR_DEVICE_LOST, "getCurrentCmdBuffer" );
+            return mCurrentCmdBuffer;
+        }
         EncoderState getEncoderState() const { return mEncoderState; }
 
         void getGraphicsEncoder();
@@ -256,6 +263,7 @@ namespace Ogre
         */
         void getCopyEncoder( const BufferPacked *buffer, TextureGpu *texture, const bool bDownload,
                              CopyEncTransitionMode::CopyEncTransitionMode transitionMode );
+        void getCopyEncoderAsyncTextureTicketUpload();
         void getCopyEncoderV1Buffer( const bool bDownload );
 
         void endCopyEncoder();

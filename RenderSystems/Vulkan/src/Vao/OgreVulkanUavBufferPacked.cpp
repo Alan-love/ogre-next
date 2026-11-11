@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "Vao/OgreVulkanBufferInterface.h"
 #include "Vao/OgreVulkanReadOnlyBufferPacked.h"
 #include "Vao/OgreVulkanTexBufferPacked.h"
+#include "Vao/OgreVulkanVaoManager.h"
 
 #include "OgreException.h"
 
@@ -58,7 +59,7 @@ namespace Ogre
         TexBufferPacked *retVal = OGRE_NEW VulkanTexBufferPacked(
             mInternalBufferStart * mBytesPerElement, mNumElements, mBytesPerElement, 0, mBufferType,
             (void *)0, false, (VulkanRenderSystem *)0, mVaoManager, bufferInterface, pixelFormat );
-        // We were overriden by the BufferPacked we just created. Restore this back!
+        // We were overridden by the BufferPacked we just created. Restore this back!
         bufferInterface->_notifyBuffer( this );
 
         return retVal;
@@ -66,15 +67,27 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     ReadOnlyBufferPacked *VulkanUavBufferPacked::getAsReadOnlyBufferImpl()
     {
+#ifdef OGRE_VK_WORKAROUND_ADRENO_6xx_READONLY_IS_TBUFFER
+        if( Workarounds::mAdreno6xxReadOnlyIsTBuffer )
+        {
+            OGRE_EXCEPT(
+                Exception::ERR_RENDERINGAPI_ERROR,
+                "This Adreno driver version does not support this operation due to applied workarounds.",
+                "VulkanUavBufferPacked::getAsReadOnlyBufferImpl" );
+        }
+#endif
         OGRE_ASSERT_HIGH( dynamic_cast<VulkanBufferInterface *>( mBufferInterface ) );
 
         VulkanBufferInterface *bufferInterface =
             static_cast<VulkanBufferInterface *>( mBufferInterface );
 
+        VulkanRenderSystem *vkRenderSystem =
+            static_cast<VulkanVaoManager *>( mVaoManager )->getVkRenderSystem();
+
         ReadOnlyBufferPacked *retVal = OGRE_NEW VulkanReadOnlyBufferPacked(
             mInternalBufferStart * mBytesPerElement, mNumElements, mBytesPerElement, 0, mBufferType,
-            (void *)0, false, (VulkanRenderSystem *)0, mVaoManager, bufferInterface, PFG_NULL );
-        // We were overriden by the BufferPacked we just created. Restore this back!
+            (void *)0, false, vkRenderSystem, mVaoManager, bufferInterface, PFG_NULL );
+        // We were overridden by the BufferPacked we just created. Restore this back!
         bufferInterface->_notifyBuffer( this );
 
         return retVal;

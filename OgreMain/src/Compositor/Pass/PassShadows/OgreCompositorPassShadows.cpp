@@ -33,7 +33,6 @@ THE SOFTWARE.
 #include "Compositor/OgreCompositorShadowNode.h"
 #include "Compositor/OgreCompositorWorkspace.h"
 #include "Compositor/Pass/PassShadows/OgreCompositorPassShadowsDef.h"
-
 #include "OgreCamera.h"
 #include "OgreRoot.h"
 
@@ -136,7 +135,7 @@ namespace Ogre
         while( itor != endt )
         {
             viewport->_setVisibilityMask( mDefinition->mVisibilityMask, mDefinition->mVisibilityMask );
-            sceneManager->_setCurrentShadowNode( *itor, false );
+            sceneManager->_setCurrentShadowNode( *itor );
 
             // use culling camera for shadows, so if shadows are re used for slightly different camera
             // (ie VR) shadows are not 'over culled'
@@ -154,7 +153,7 @@ namespace Ogre
         }
 
         sceneManager->_setCurrentCompositorPass( 0 );
-        sceneManager->_setCurrentShadowNode( 0, false );
+        sceneManager->_setCurrentShadowNode( 0 );
 
         notifyPassPosExecuteListeners();
 

@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include "OgreRootLayout.h"
 #include "OgreVulkanProgram.h"
 
+#include <atomic>
+
 struct VkDescriptorSetLayoutBinding;
 struct VkWriteDescriptorSet;
 
@@ -56,7 +58,9 @@ namespace Ogre
 {
     uint32 toVkDescriptorType( DescBindingTypes::DescBindingTypes type );
 
-    class _OgreVulkanExport VulkanRootLayout final : protected RootLayout, public ResourceAlloc
+    class _OgreVulkanExport VulkanRootLayout final : protected RootLayout,
+                                                     public OgreAllocatedObj,
+                                                     protected VulkanDeviceResource
     {
         /// One handle per binding set (up to OGRE_VULKAN_MAX_NUM_BOUND_DESCRIPTOR_SETS)
         /// Doesn't have gaps (e.g. if mDescBindingRanges[3] is not empty, then mSets[3] must exist)
@@ -65,14 +69,14 @@ namespace Ogre
 
         /// The Vulkan Handle to our root layout. Won't be initialized if this
         /// VulkanRootLayout never makes it into a PSO.
-        VkPipelineLayout mRootLayout;
+        std::atomic<VkPipelineLayout> mRootLayout;
 
         /// There's one VulkanDescriptorPool per binding set
         FastArray<VulkanDescriptorPool *> mPools;
 
         /// When mArrayRanges is not empty, there's more emulated slots than bindings slots
         /// So when we're filling descriptors via VkWriteDescriptorSet/vkUpdateDescriptorSets
-        /// we must substracts the amount of slots that belong to arrays
+        /// we must subtracts the amount of slots that belong to arrays
         ///
         /// In other words this variable tracks how many slots have been "taken away" by arrays
         ///
@@ -124,6 +128,9 @@ namespace Ogre
 
         uint32 calculateFirstDirtySet( const VulkanGlobalBindingTable &table ) const;
 
+        void notifyDeviceLost() override;
+        void notifyDeviceRestored( unsigned pass ) override;
+
     public:
         VulkanRootLayout( VulkanGpuProgramManager *programManager );
         ~VulkanRootLayout();
@@ -133,14 +140,14 @@ namespace Ogre
         using RootLayout::getDescBindingRanges;
         using RootLayout::validateArrayBindings;
 
-        /// @copydoc VulkanRootLayout::copyFrom
+        /// @copydoc RootLayout::copyFrom
         void copyFrom( const RootLayout &rootLayout, bool bIncludeArrayBindings = true );
 
         /// Performs outRootLayout.copyFrom( this )
         /// This function is necessary because RootLayout is a protected base class
         void copyTo( RootLayout &outRootLayout, bool bIncludeArrayBindings );
 
-        /// @copydoc VulkanRootLayout::parseRootLayout
+        /// @copydoc RootLayout::parseRootLayout
         void parseRootLayout( const char *rootLayout, const bool bCompute, const String &filename );
 
         /** Generates all the macros for compiling shaders, based on our layout

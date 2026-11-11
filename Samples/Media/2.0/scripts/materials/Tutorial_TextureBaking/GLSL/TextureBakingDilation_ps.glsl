@@ -7,7 +7,7 @@
 
 #define float4 vec4
 
-vulkan_layout( ogre_t0 ) uniform sampler2DArray srcTex;
+vulkan_layout( ogre_t0 ) uniform texture2DArray srcTex;
 
 vulkan_layout( location = 0 )
 out float4 fragColour;
@@ -30,7 +30,7 @@ void main()
 		c = c.a > 0 ? c : texelFetch( srcTex, rshort3( iFragCoord.xy + short2(  1,  1 ), 0 ), 0 );
 		c = c.a > 0 ? c : texelFetch( srcTex, rshort3( iFragCoord.xy + short2( -1,  1 ), 0 ), 0 );
 		c = c.a > 0 ? c : texelFetch( srcTex, rshort3( iFragCoord.xy + short2(  1, -1 ), 0 ), 0 );
-		c = c.a > 0 ? c : texelFetch( srcTex, rshort3( iFragCoord.xy + short2(  1, -1 ), 0 ), 0 );
+		c = c.a > 0 ? c : texelFetch( srcTex, rshort3( iFragCoord.xy + short2( -1, -1 ), 0 ), 0 );
 	}
 
 	fragColour.xyzw = c.xyzw;

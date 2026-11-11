@@ -29,16 +29,15 @@ THE SOFTWARE.
 #include "OgreStableHeaders.h"
 
 #include "Compositor/Pass/PassDepthCopy/OgreCompositorPassDepthCopy.h"
-#include "Compositor/Pass/PassDepthCopy/OgreCompositorPassDepthCopyDef.h"
-#include "Compositor/OgreCompositorNodeDef.h"
+
 #include "Compositor/OgreCompositorNode.h"
+#include "Compositor/OgreCompositorNodeDef.h"
 #include "Compositor/OgreCompositorWorkspace.h"
 #include "Compositor/OgreCompositorWorkspaceListener.h"
-
+#include "Compositor/Pass/PassDepthCopy/OgreCompositorPassDepthCopyDef.h"
 #include "OgreDepthBuffer.h"
-#include "OgreTextureBox.h"
-
 #include "OgreRenderSystem.h"
+#include "OgreTextureBox.h"
 
 namespace Ogre
 {
@@ -64,15 +63,15 @@ namespace Ogre
     CompositorPassDepthCopy::CompositorPassDepthCopy( const CompositorPassDepthCopyDef *definition,
                                                       const RenderTargetViewDef *rtv,
                                                       CompositorNode *parentNode ) :
-                CompositorPass( definition, parentNode ),
-                mDefinition( definition )
+        CompositorPass( definition, parentNode ),
+        mDefinition( definition )
     {
-        initialize( rtv );
+        initialize( 0, true );
     }
     //-----------------------------------------------------------------------------------
     void CompositorPassDepthCopy::execute( const Camera *lodCamera )
     {
-        //Execute a limited number of times?
+        // Execute a limited number of times?
         if( mNumPassesLeft != std::numeric_limits<uint32>::max() )
         {
             if( !mNumPassesLeft )
@@ -88,19 +87,27 @@ namespace Ogre
         analyzeBarriers();
         executeResourceTransitions();
 
-        //Fire the listener in case it wants to change anything
+        // Fire the listener in case it wants to change anything
         notifyPassPreExecuteListeners();
 
-        //Should we retrieve every update, or cache the return values
-        //and listen to notifyRecreated and family of funtions?
+        // Should we retrieve every update, or cache the return values
+        // and listen to notifyRecreated and family of funtions?
         TextureGpu *srcChannel = mParentNode->getDefinedTexture( mDefinition->mSrcDepthTextureName );
         TextureGpu *dstChannel = mParentNode->getDefinedTexture( mDefinition->mDstDepthTextureName );
 
-        TextureBox srcBox = srcChannel->getEmptyBox( 0 );
-        TextureBox dstBox = dstChannel->getEmptyBox( 0 );
-        srcChannel->copyTo( dstChannel, dstBox, 0, srcBox, 0, false,
-                            CopyEncTransitionMode::AlreadyInLayoutThenAuto,
-                            CopyEncTransitionMode::AlreadyInLayoutThenAuto );
+        uint8 lastMipmapPlus1 = mDefinition->mMipLevelStart + mDefinition->mNumMiplevels;
+        if( mDefinition->mNumMiplevels == 0u )
+            lastMipmapPlus1 = srcChannel->getNumMipmaps();
+
+        CopyEncTransitionMode::CopyEncTransitionMode mode =
+            CopyEncTransitionMode::AlreadyInLayoutThenAuto;
+        for( uint8 mipLevel = mDefinition->mMipLevelStart; mipLevel < lastMipmapPlus1; ++mipLevel )
+        {
+            TextureBox srcBox = srcChannel->getEmptyBox( mipLevel );
+            TextureBox dstBox = dstChannel->getEmptyBox( mipLevel );
+            srcChannel->copyTo( dstChannel, dstBox, mipLevel, srcBox, mipLevel, false, mode, mode );
+            mode = CopyEncTransitionMode::Auto;
+        }
 
         notifyPassPosExecuteListeners();
     }
@@ -122,4 +129,4 @@ namespace Ogre
         resolveTransition( srcChannel, ResourceLayout::CopySrc, ResourceAccess::Read, 0u );
         resolveTransition( dstChannel, ResourceLayout::CopyDst, ResourceAccess::Write, 0u );
     }
-}
+}  // namespace Ogre

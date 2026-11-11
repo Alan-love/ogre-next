@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "OgreVulkanMappings.h"
 #include "OgreVulkanQueue.h"
 #include "OgreVulkanTextureGpu.h"
+#include "OgreVulkanTextureGpuWindow.h"
 #include "OgreVulkanUtils.h"
 #include "Vao/OgreVulkanVaoManager.h"
 
@@ -69,7 +70,7 @@ namespace Ogre
             unmap();
 
         if( mVboName.mVboName )
-            mVaoManager->deallocateRawBuffer( mVboName );
+            mVaoManager->deallocateRawBuffer( mVboName, mStatus != Downloading );
 
         if( mAccurateFence )
         {
@@ -118,6 +119,9 @@ namespace Ogre
 
         // No need to call mQueue->getCopyEncoder( this, 0, false ); because
         // this is a fresh memory region (unless mStatus == Downloading)
+        // But getCopyEncoderAsyncTextureTicketUpload still tells Vulkan to
+        // flush the caches once we're done writing to mVboName.mVboName
+        mQueue->getCopyEncoderAsyncTextureTicketUpload();
         mQueue->getCopyEncoder( 0, textureSrc, true, CopyEncTransitionMode::Auto );
         if( mStatus == Downloading )
         {
@@ -129,8 +133,26 @@ namespace Ogre
             memBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
             // GPU must stop using this buffer before we can write into it
-            vkCmdPipelineBarrier( mQueue->mCurrentCmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            vkCmdPipelineBarrier( mQueue->getCurrentCmdBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
                                   VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1u, &memBarrier, 0u, 0, 0u, 0 );
+        }
+
+        if( textureSrc->isRenderWindowSpecific() &&
+            PixelFormatGpuUtils::isAccessible( textureSrc->getPixelFormat() ) )
+        {
+            // This is a swapchain (depth & stencil textures should not reach here).
+            //
+            // We must add the semaphore now.
+            OGRE_ASSERT_HIGH( dynamic_cast<VulkanTextureGpuWindow *>( textureSrc ) );
+            VulkanTextureGpuWindow *textureVulkan = static_cast<VulkanTextureGpuWindow *>( textureSrc );
+            VkSemaphore semaphore = textureVulkan->getImageAcquiredSemaphore();
+            if( semaphore )
+            {
+                mQueue->addWindowToWaitFor( semaphore );
+                vkCmdPipelineBarrier( mQueue->getCurrentCmdBuffer(),
+                                      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                      VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0u, 0, 0u, 0, 0u, 0 );
+            }
         }
 
         size_t destBytesPerRow = getBytesPerRow();
@@ -152,7 +174,8 @@ namespace Ogre
         }
         region.bufferImageHeight = 0;
 
-        region.imageSubresource.aspectMask = VulkanMappings::getImageAspect( mPixelFormatFamily );
+        region.imageSubresource.aspectMask =
+            VulkanMappings::getImageAspect( textureSrc->getPixelFormat() );
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = srcTextureBox.sliceStart;
         region.imageSubresource.layerCount = srcTextureBox.numSlices;
@@ -164,7 +187,7 @@ namespace Ogre
         region.imageExtent.height = srcTextureBox.height;
         region.imageExtent.depth = srcTextureBox.depth;
 
-        vkCmdCopyImageToBuffer( mQueue->mCurrentCmdBuffer, srcTextureVk->getFinalTextureName(),
+        vkCmdCopyImageToBuffer( mQueue->getCurrentCmdBuffer(), srcTextureVk->getFinalTextureName(),
                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, mVboName.mVboName, 1u, &region );
 
         if( accurateTracking )
@@ -239,7 +262,7 @@ namespace Ogre
                 mQueue->releaseFence( mAccurateFence );
                 mAccurateFence = 0;
 
-                checkVkResult( result, "vkWaitForFences" );
+                checkVkResult( mQueue->mOwnerDevice, result, "vkWaitForFences" );
                 if( mStatus != Mapped )
                     mStatus = Ready;
                 retVal = true;
@@ -260,7 +283,7 @@ namespace Ogre
 
                     LogManager::getSingleton().logMessage(
                         "WARNING: Calling AsyncTextureTicket::queryIsTransferDone too "
-                        "often with innacurate tracking in the same frame this transfer "
+                        "often with inaccurate tracking in the same frame this transfer "
                         "was issued. Switching to accurate tracking. If this is an accident, "
                         "wait until you've rendered a few frames before checking if it's done. "
                         "If this is on purpose, consider calling AsyncTextureTicket::download()"

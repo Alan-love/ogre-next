@@ -28,6 +28,7 @@ THE SOFTWARE.
 
 #include "OgreMetalStagingTexture.h"
 
+#include "OgreException.h"
 #include "OgreMetalDevice.h"
 #include "OgreMetalTextureGpu.h"
 #include "OgreStringConverter.h"
@@ -113,7 +114,7 @@ namespace Ogre
         MetalTextureGpu *dstTextureMetal = static_cast<MetalTextureGpu *>( dstTexture );
 
         const size_t srcOffset =
-            reinterpret_cast<uint8 *>( srcBox.data ) - reinterpret_cast<uint8 *>( mMappedPtr );
+            size_t( reinterpret_cast<uint8 *>( srcBox.data ) - reinterpret_cast<uint8 *>( mMappedPtr ) );
         const NSUInteger destinationSlice =
             ( dstBox ? dstBox->sliceStart : 0 ) + dstTexture->getInternalSliceStart();
         NSUInteger xPos = static_cast<NSUInteger>( dstBox ? dstBox->x : 0 );
@@ -133,4 +134,4 @@ namespace Ogre
                       destinationOrigin:MTLOriginMake( xPos, yPos, zPos )];
         }
     }
-}
+}  // namespace Ogre

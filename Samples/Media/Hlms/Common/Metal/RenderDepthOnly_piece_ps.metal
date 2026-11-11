@@ -5,7 +5,7 @@
 	@piece( output_type )void@end
 @end
 
-@property( hlms_render_depth_only && !alpha_test && !hlms_shadows_esm )
+@property( hlms_render_depth_only && !alpha_test && !hlms_alpha_hash && !hlms_shadows_esm )
 	@set( hlms_disable_stage, 1 )
 @end
 
@@ -13,7 +13,7 @@
 	struct PS_OUTPUT
 	{
 		@property( !hlms_shadowcaster )
-			float4 colour0	[[ color(@counter(rtv_target)) ]];
+			midf4 colour0	[[ color(@counter(rtv_target)) ]];
 		@else
 			@property( !hlms_render_depth_only )
 				float colour0	[[ color(@counter(rtv_target)) ]];
@@ -24,5 +24,6 @@
 		@end
 
 		@insertpiece( ExtraOutputTypes )
+		@insertpiece( custom_ps_output_types )
 	};
 @end

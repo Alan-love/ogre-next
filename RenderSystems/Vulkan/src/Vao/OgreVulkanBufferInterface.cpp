@@ -43,7 +43,7 @@ namespace Ogre
         mVboPoolIdx( vboPoolIdx ),
         mVboName( vboName ),
         mMappedPtr( 0 ),
-        mUnmapTicket( (size_t)-1 ),
+        mUnmapTicket( std::numeric_limits<size_t>::max() ),
         mDynamicBuffer( dynamicBuffer )
     {
     }
@@ -102,12 +102,15 @@ namespace Ogre
 
         char *retVal = (char *)mMappedPtr;
 
-        // For persistent maps, we've mapped the whole 3x size of the buffer. mLastMappingStart
-        // points to the right offset so that we can later flush correctly.
-        size_t lastMappingStart =
-            elementStart + mBuffer->_getInternalNumElements() * dynamicCurrentFrame;
-        mBuffer->mLastMappingStart = lastMappingStart;
-        retVal += lastMappingStart * bytesPerElement;
+        if( mBuffer->mBufferType >= BT_DYNAMIC_PERSISTENT )
+        {
+            // For persistent maps, we've mapped the whole 3x size of the buffer. mLastMappingStart
+            // points to the right offset so that we can later flush correctly.
+            size_t lastMappingStart =
+                elementStart + mBuffer->_getInternalNumElements() * dynamicCurrentFrame;
+            mBuffer->mLastMappingStart = lastMappingStart;
+            retVal += lastMappingStart * bytesPerElement;
+        }
 
         return retVal;
     }
@@ -142,6 +145,15 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     size_t VulkanBufferInterface::advanceFrame( bool bAdvanceFrame )
     {
+        if( mBuffer->mBufferType == BT_DEFAULT_SHARED )
+        {
+            if( bAdvanceFrame )
+            {
+                mBuffer->mFinalBufferStart = mBuffer->mInternalBufferStart;
+            }
+            return 0;
+        }
+
         VulkanVaoManager *vaoManager = static_cast<VulkanVaoManager *>( mBuffer->mVaoManager );
         size_t dynamicCurrentFrame = mBuffer->mFinalBufferStart - mBuffer->mInternalBufferStart;
         dynamicCurrentFrame /= mBuffer->_getInternalNumElements();
@@ -159,6 +171,12 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     void VulkanBufferInterface::regressFrame()
     {
+        if( mBuffer->mBufferType == BT_DEFAULT_SHARED )
+        {
+            mBuffer->mFinalBufferStart = mBuffer->mInternalBufferStart;
+            return;
+        }
+
         VulkanVaoManager *vaoManager = static_cast<VulkanVaoManager *>( mBuffer->mVaoManager );
         size_t dynamicCurrentFrame = mBuffer->mFinalBufferStart - mBuffer->mInternalBufferStart;
         dynamicCurrentFrame /= mBuffer->_getInternalNumElements();
@@ -188,7 +206,7 @@ namespace Ogre
         region.srcOffset = srcOffsetBytes;
         region.dstOffset = dstOffsetBytes;
         region.size = sizeBytes;
-        vkCmdCopyBuffer( device->mGraphicsQueue.mCurrentCmdBuffer, mVboName, dstBufferVk->getVboName(),
-                         1u, &region );
+        vkCmdCopyBuffer( device->mGraphicsQueue.getCurrentCmdBuffer(), mVboName,
+                         dstBufferVk->getVboName(), 1u, &region );
     }
 }  // namespace Ogre

@@ -108,6 +108,9 @@ endif ()
 find_package(Rapidjson)
 macro_log_feature(Rapidjson_FOUND "rapidjson" "C++ JSON parser" "https://rapidjson.org/" FALSE "" "")
 
+find_package(DearImgui)
+macro_log_feature(DearImgui_FOUND "Dear Imgui" "Dear Imgui" "https://github.com/ocornut/imgui" FALSE "" "")
+
 find_package(RenderDoc)
 macro_log_feature(RenderDoc_FOUND "RenderDoc" "RenderDoc Integration" "https://renderdoc.org/" FALSE "" "")
 
@@ -117,20 +120,12 @@ macro_log_feature(RenderDoc_FOUND "RenderDoc" "RenderDoc Integration" "https://r
 #######################################################################
 
 # Find OpenGL
-if(NOT ANDROID AND NOT EMSCRIPTEN)
+if(NOT ANDROID AND NOT EMSCRIPTEN AND NOT APPLE)
   find_package(OpenGL)
-  macro_log_feature(OPENGL_FOUND "OpenGL" "Support for the OpenGL render system" "http://www.opengl.org/" FALSE "" "")
+  macro_log_feature(OPENGL_FOUND "OpenGL 3+" "Support for the OpenGL 3+ render system" "http://www.opengl.org/" FALSE "" "")
 endif()
 
-# Find OpenGL 3+
-find_package(OpenGL)
-macro_log_feature(OPENGL_FOUND "OpenGL 3+" "Support for the OpenGL 3+ render system" "http://www.opengl.org/" FALSE "" "")
-
 if(NOT OGRE_SKIP_GLES_SEARCHING)
-	# Find OpenGL ES 1.x
-	find_package(OpenGLES)
-	macro_log_feature(OPENGLES_FOUND "OpenGL ES 1.x" "Support for the OpenGL ES 1.x render system (DEPRECATED)" "http://www.khronos.org/opengles/" FALSE "" "")
-
 	# Find OpenGL ES 2.x
 	find_package(OpenGLES2)
 	macro_log_feature(OPENGLES2_FOUND "OpenGL ES 2.x" "Support for the OpenGL ES 2.x render system" "http://www.khronos.org/opengles/" FALSE "" "")
@@ -142,9 +137,6 @@ endif()
 
 # Find DirectX
 if(WIN32)
-	find_package(DirectX)
-	macro_log_feature(DirectX9_FOUND "DirectX9" "Support for the DirectX render system" "http://msdn.microsoft.com/en-us/directx/" FALSE "" "")
-	
 	find_package(DirectX11)
 	macro_log_feature(DirectX11_FOUND "DirectX11" "Support for the DirectX11 render system" "http://msdn.microsoft.com/en-us/directx/" FALSE "" "")
 
@@ -159,6 +151,11 @@ if(WIN32)
 
 	find_package(AMDAGS)
 	macro_log_feature(AMDAGS_FOUND "AMDAGS" "Use AMD GPU Services library to provide D3D vendor extensions" "https://gpuopen.com/gaming-product/amd-gpu-services-ags-library/" FALSE "" "")
+endif()
+
+if(ANDROID)
+	find_package(AndroidSwappy)
+	macro_log_feature(AndroidSwappy_FOUND "Android Swappy" "Frame Pacing Library (Swappy) for Android" "https://developer.android.com/games/sdk/frame-pacing" FALSE "" "")
 endif()
 
 find_package(OpenVR)
@@ -246,6 +243,9 @@ elseif (EXISTS "${OGRE_SOURCE_DIR}/ogredeps/CMakeLists.txt")
   add_subdirectory(ogredeps)
 endif ()
 
+include( CMake/Packages/wxWidgetsSetup.cmake )
+findWxWidgets()
+macro_log_feature( wxWidgets_FOUND "wxWidgets" "GUI library for some tools" "https://wxwidgets.org/" FALSE "3.2" "" )
 
 # Display results, terminate if anything required is missing
 MACRO_DISPLAY_FEATURE_LOG()
@@ -262,7 +262,6 @@ include_directories(
   ${OPENGLES2_INCLUDE_DIRS}
   ${OPENGLES3_INCLUDE_DIRS}
   ${X11_INCLUDE_DIR}
-  ${DirectX_INCLUDE_DIRS}
   ${CppUnit_INCLUDE_DIRS}
   ${GLSL_Optimizer_INCLUDE_DIRS}
   ${HLSL2GLSL_INCLUDE_DIRS}
@@ -270,10 +269,8 @@ include_directories(
 
 link_directories(
   ${OPENGL_LIBRARY_DIRS}
-  ${OPENGLES_LIBRARY_DIRS}
   ${OPENGLES2_LIBRARY_DIRS}
   ${OPENGLES3_LIBRARY_DIRS}
   ${X11_LIBRARY_DIRS}
-  ${DirectX_LIBRARY_DIRS}
   ${CppUnit_LIBRARY_DIRS}
 )

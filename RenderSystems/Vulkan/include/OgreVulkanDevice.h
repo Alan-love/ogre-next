@@ -39,6 +39,80 @@ THE SOFTWARE.
 
 namespace Ogre
 {
+    /// Use it to pass an external instance
+    ///
+    /// We will verify if the layers and extensions you claim
+    /// were enabled are actually supported.
+    ///
+    /// This is so because in Qt you can request these layers/extensions
+    /// but you get no feedback from Qt whether they were present and
+    /// thus successfully enabled.
+    ///
+    /// However if the instance actually supports the layer/extension
+    /// you requested but the third party library explicitly chose not to
+    /// enable it for any random reason, then we will wrongly think
+    /// it's enabled / present.
+    struct VulkanExternalInstance
+    {
+        VkInstance instance;
+        FastArray<VkLayerProperties> instanceLayers;
+        FastArray<VkExtensionProperties> instanceExtensions;
+    };
+
+    /// Use it to pass an external device
+    ///
+    /// See VulkanExternalInstance on extensions verification.
+    struct VulkanExternalDevice
+    {
+        VkPhysicalDevice physicalDevice;
+        VkDevice device;
+        FastArray<VkExtensionProperties> deviceExtensions;
+        VkQueue graphicsQueue;
+        VkQueue presentQueue;
+    };
+
+    /**
+       We need the ability to re-enumerate devices to handle physical device removing, that
+       requires fresh VkInstance instance, as otherwise Vulkan returns obsolete physical devices list.
+    */
+    class VulkanInstance final
+    {
+    public:
+        static void enumerateExtensionsAndLayers( VulkanExternalInstance *externalInstance );
+        static bool hasExtension( const char *extension );
+
+        VulkanInstance( const String &appName, VulkanExternalInstance *externalInstance,
+                        PFN_vkDebugReportCallbackEXT debugCallback, RenderSystem *renderSystem );
+        ~VulkanInstance();
+
+        void initDebugFeatures( PFN_vkDebugReportCallbackEXT callback, void *userdata,
+                                bool hasRenderDocApi );
+
+        void initPhysicalDeviceList();
+
+        // never fail but can return default driver if requested is not found
+        const VulkanPhysicalDevice *findByName( const String &name ) const;
+
+    public:
+        VkInstance mVkInstance;
+        bool mVkInstanceIsExternal;
+
+        FastArray<VulkanPhysicalDevice> mVulkanPhysicalDevices;
+
+        PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback;
+        PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallback;
+        VkDebugReportCallbackEXT mDebugReportCallback;
+
+        PFN_vkCmdBeginDebugUtilsLabelEXT CmdBeginDebugUtilsLabelEXT;
+        PFN_vkCmdEndDebugUtilsLabelEXT CmdEndDebugUtilsLabelEXT;
+
+        static FastArray<const char *> enabledExtensions;  // sorted
+        static FastArray<const char *> enabledLayers;      // sorted
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_HIGH
+        static bool hasValidationLayers;
+#endif
+    };
+
     struct _OgreVulkanExport VulkanDevice
     {
         struct SelectedQueue
@@ -49,10 +123,24 @@ namespace Ogre
             SelectedQueue();
         };
 
+        struct ExtraVkFeatures
+        {
+            // VkPhysicalDevice16BitStorageFeatures
+            VkBool32 storageInputOutput16;
+
+            // VkPhysicalDeviceShaderFloat16Int8Features
+            VkBool32 shaderFloat16;
+            VkBool32 shaderInt8;
+
+            // VkPhysicalDevicePipelineCreationCacheControlFeatures
+            VkBool32 pipelineCreationCacheControl;
+        };
+
         // clang-format off
-        VkInstance          mInstance;
+        std::shared_ptr<VulkanInstance> mInstance;
         VkPhysicalDevice    mPhysicalDevice;
         VkDevice            mDevice;
+        VkPipelineCache     mPipelineCache;
 
         VkQueue             mPresentQueue;
         /// Graphics queue is *guaranteed by spec* to also be able to run compute and transfer
@@ -67,6 +155,7 @@ namespace Ogre
         VkPhysicalDeviceProperties mDeviceProperties;
         VkPhysicalDeviceMemoryProperties mDeviceMemoryProperties;
         VkPhysicalDeviceFeatures mDeviceFeatures;
+        ExtraVkFeatures mDeviceExtraFeatures;
         FastArray<VkQueueFamilyProperties> mQueueProps;
 
         /// Extensions requested when created. Sorted
@@ -76,6 +165,16 @@ namespace Ogre
         VulkanRenderSystem *mRenderSystem;
 
         uint32 mSupportedStages;
+
+        VkResult mDeviceLostReason;
+        bool mIsExternal;
+
+        void fillDeviceFeatures();
+        bool fillDeviceFeatures2(
+            VkPhysicalDeviceFeatures2 &deviceFeatures2,
+            VkPhysicalDevice16BitStorageFeatures &device16BitStorageFeatures,
+            VkPhysicalDeviceShaderFloat16Int8Features &deviceShaderFloat16Int8Features,
+            VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT &deviceCacheControlFeatures );
 
         static void destroyQueues( FastArray<VulkanQueue> &queueArray );
 
@@ -87,23 +186,17 @@ namespace Ogre
                                     FastArray<VkDeviceQueueCreateInfo> &outQueueCiArray );
 
     public:
-        VulkanDevice( VkInstance instance, uint32 deviceIdx, VulkanRenderSystem *renderSystem );
+        VulkanDevice( VulkanRenderSystem *renderSystem );
         ~VulkanDevice();
 
-    protected:
-        static VkDebugReportCallbackCreateInfoEXT addDebugCallback(
-            PFN_vkDebugReportCallbackEXT debugCallback, RenderSystem *renderSystem );
+        void destroy();
 
-    public:
-        static VkInstance createInstance( const String &appName, FastArray<const char *> &extensions,
-                                          FastArray<const char *> &layers,
-                                          PFN_vkDebugReportCallbackEXT debugCallback,
-                                          RenderSystem *renderSystem );
+        void setPhysicalDevice( const std::shared_ptr<VulkanInstance> &instance,
+                                const VulkanPhysicalDevice &physicalDevice,
+                                const VulkanExternalDevice *externalDevice );
 
-        void createPhysicalDevice( uint32 deviceIdx );
-
-        void createDevice( FastArray<const char *> &extensions, uint32 maxComputeQueues,
-                           uint32 maxTransferQueues );
+        void createDevice( const FastArray<VkExtensionProperties> &availableExtensions,
+                           uint32 maxComputeQueues, uint32 maxTransferQueues );
 
         bool hasDeviceExtension( const IdString extension ) const;
 
@@ -114,6 +207,9 @@ namespace Ogre
 
         /// Waits for the GPU to finish all pending commands.
         void stall();
+        void stallIgnoringDeviceLost();
+
+        bool isDeviceLost() const { return mDeviceLostReason != VK_SUCCESS; }
     };
 
     // Mask away read flags from srcAccessMask

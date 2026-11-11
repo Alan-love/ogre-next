@@ -37,22 +37,22 @@ THE SOFTWARE.
 namespace Ogre
 {
     /** \addtogroup Core
-    *  @{
-    */
+     *  @{
+     */
     /** \addtogroup Effects
-    *  @{
-    */
+     *  @{
+     */
 
     class CompositorWorkspaceListener
     {
     public:
         /** Called before all nodes are going to be updated. Use this place to update your own,
             manually updated Workspaces without having to call
-            @CompositorWorkspace::_beginUpdate( forceBeginFrame=true )
+            CompositorWorkspace::_beginUpdate( forceBeginFrame=true )
         */
         virtual void workspacePreUpdate( CompositorWorkspace *workspace ) {}
         /** Called after all nodes has been updated.
-        */
+         */
         virtual void workspacePosUpdate( CompositorWorkspace *workspace ) {}
         /** Called early on in pass' execution. Happens before passPreExecute,
             before the pass has set anything.
@@ -75,6 +75,10 @@ namespace Ogre
             Gets called after passPreExecute and before passSceneAfterFrustumCulling
 
             Warning: calling pass->execute can result in recursive calls.
+
+        @param pass
+            PassScene calling this listener.
+            Can be nullptr if the caller is CompositorPassWarmUp
         */
         virtual void passSceneAfterShadowMaps( CompositorPassScene *pass ) {}
 
@@ -104,7 +108,7 @@ namespace Ogre
 
     /** @} */
     /** @} */
-}
+}  // namespace Ogre
 
 #include "OgreHeaderSuffix.h"
 

@@ -30,11 +30,62 @@ THE SOFTWARE.
 
 #include "OgreVulkanPrerequisites.h"
 
+#include "OgreVulkanDeviceResource.h"
 #include "OgreWindow.h"
 
 namespace Ogre
 {
+#ifdef OGRE_PLATFORM_ANDROID
+#    define OGRE_ANDROID_SURFACE_LOCK \
+        std::lock_guard<std::recursive_mutex> androidLock( mAndroidSurfaceMutex )
+#    define OGRE_ANDROID_SURFACE_PREVENT_USE \
+        std::lock_guard<std::recursive_mutex> androidLock( mAndroidSurfaceMutex ); \
+        if( mNativeWindowChangeRequested ) \
+        { \
+            LogManager::getSingleton().logMessage( \
+                "[VulkanWindow*] Preventing surface access due to requested change." ); \
+            return; \
+        } \
+        void()
+#else
+#    define OGRE_ANDROID_SURFACE_LOCK void()
+#    define OGRE_ANDROID_SURFACE_PREVENT_USE void()
+#endif
+
+    OGRE_ASSUME_NONNULL_BEGIN
+
     class VulkanWindow : public Window
+    {
+    protected:
+        VulkanDevice *mDevice;
+
+        bool mHwGamma;
+
+    public:
+        VulkanWindow( const String &title, uint32 width, uint32 height, bool fullscreenMode );
+
+        void _setDevice( VulkanDevice *device );
+    };
+
+    class VulkanWindowNull : public VulkanWindow
+    {
+    public:
+        VulkanWindowNull( const String &title, uint32 width, uint32 height, bool fullscreenMode );
+        ~VulkanWindowNull() override;
+
+        void destroy() override;
+        void reposition( int32 leftPt, int32 topPt ) override;
+        bool isClosed() const override;
+        void _setVisible( bool visible ) override;
+        bool isVisible() const override;
+        void setHidden( bool hidden ) override;
+        bool isHidden() const override;
+        void _initialize( TextureGpuManager *textureGpuManager,
+                          const NameValuePairList *ogre_nullable miscParams ) override;
+        void swapBuffers() override;
+    };
+
+    class VulkanWindowSwapChainBased : public VulkanWindow, protected VulkanDeviceResource
     {
     public:
         enum Backend
@@ -43,11 +94,11 @@ namespace Ogre
         };
         enum SwapchainStatus
         {
-            /// We already called VulkanWindow::acquireNextSwapchain.
+            /// We already called VulkanWindowSwapChainBased::acquireNextSwapchain.
             ///
             /// Can only go into this state if we're coming from SwapchainReleased
             SwapchainAcquired,
-            /// We already called VulkanWindow::getImageAcquiredSemaphore.
+            /// We already called VulkanWindowSwapChainBased::getImageAcquiredSemaphore.
             /// Further calls to getImageAcquiredSemaphore will return null.
             /// Ogre is rendering or intends to into this swapchain.
             ///
@@ -63,10 +114,9 @@ namespace Ogre
         };
 
         bool mLowestLatencyVSync;
-        bool mHwGamma;
+        bool mEnablePreTransform;
         bool mClosed;
-
-        VulkanDevice *mDevice;
+        bool mCanDownloadData;
 
         VkSurfaceKHR mSurfaceKHR;
         VkSwapchainKHR mSwapchain;
@@ -79,25 +129,43 @@ namespace Ogre
         bool mRebuildingSwapchain;
         bool mSuboptimal;
 
+#ifdef OGRE_PLATFORM_ANDROID
+        // A bit ugly but here goes: Android will trigger ANRs if we spend too much in
+        // onSurfaceDestroyed. Our original solution was to wait for the render thread to
+        // be done rendering and release the surface, then return from onSurfaceDestroyed.
+        //
+        // However this causes ANRs higher than Google's threshold on slow phones, so the solution is to
+        // release the surface asynchronously and return from onSurfaceDestroyed immediately. Once we get
+        // a release request, we must not use the surface again.
+        //
+        // To avoid placing virtuals anywhere, this code is injected into VulkanWindowSwapChainBased
+        // using compile-time macros instead of moving everything to VulkanAndroidWindow.
+        //
+        // Old drivers crash when we do this, so we use OGRE_VK_WORKAROUND_SYNC_WINDOW_INIT for them.
+        std::recursive_mutex mAndroidSurfaceMutex;
+        bool mNativeWindowChangeRequested;  // GUARDED_BY( mAndroidSurfaceMutex )
+#endif
+
         void parseSharedParams( const NameValuePairList *miscParams );
 
         PixelFormatGpu chooseSurfaceFormat( bool hwGamma );
-        void createSwapchain();
-        void destroySwapchain();
+        virtual void createSurface() = 0;
+        virtual void destroySurface();
+        virtual void createSwapchain();
+        virtual void destroySwapchain( bool finalDestruction = false );
+
+        void notifyDeviceLost() override;
+        void notifyDeviceRestored( unsigned pass ) override;
 
     public:
         void acquireNextSwapchain();
 
     public:
-        VulkanWindow( const String &title, uint32 width, uint32 height, bool fullscreenMode );
-        ~VulkanWindow() override;
+        VulkanWindowSwapChainBased( const String &title, uint32 width, uint32 height,
+                                    bool fullscreenMode );
+        ~VulkanWindowSwapChainBased() override;
 
         void destroy() override;
-
-        void _setDevice( VulkanDevice *device );
-        void _initialize( TextureGpuManager *textureGpuManager ) override;
-        virtual void _initialize( TextureGpuManager *textureGpuManager,
-                                  const NameValuePairList *miscParams ) = 0;
 
         /// Returns null if getImageAcquiredSemaphore has already been called during this frame
         VkSemaphore getImageAcquiredSemaphore();
@@ -109,6 +177,10 @@ namespace Ogre
 
         void setVSync( bool vSync, uint32 vSyncInterval ) override;
 
+        void setWantsToDownload( bool bWantsToDownload ) override;
+
+        bool canDownloadData() const override;
+
         /// Tells our VulkanDevice that the next commitAndNextCommandBuffer call should present us
         /// Calling swapBuffers during the command buffer that is rendering to us is key for
         /// good performance; otherwise Ogre may split the commands that render to this window
@@ -118,11 +190,15 @@ namespace Ogre
         /** Actually performs present. Called by VulkanDevice::commitAndNextCommandBuffer
         @param queueFinishSemaphore
             Makes our present request wait until the Queue is done executing before we can present
+        @return
+            The swapchain index so that queueFinishSemaphore can be scheduled for recycling properly.
         */
-        void _swapBuffers( VkSemaphore queueFinishSemaphore );
+        uint32 _swapBuffers( VkSemaphore queueFinishSemaphore );
 
         void getCustomAttribute( IdString name, void *pData ) override;
     };
+
+    OGRE_ASSUME_NONNULL_END
 }  // namespace Ogre
 
 #endif

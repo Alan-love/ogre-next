@@ -26,24 +26,19 @@ THE SOFTWARE.
 -----------------------------------------------------------------------------
 */
 #include "OgreD3D11Plugin.h"
+
+#include "OgreAbiUtils.h"
 #include "OgreRoot.h"
 
-namespace Ogre 
+namespace Ogre
 {
     const String sPluginName = "D3D11 RenderSystem";
     //---------------------------------------------------------------------
-    D3D11Plugin::D3D11Plugin()
-        : mRenderSystem(0)
-    {
-
-    }
+    D3D11Plugin::D3D11Plugin() : mRenderSystem( 0 ) {}
     //---------------------------------------------------------------------
-    const String& D3D11Plugin::getName() const
-    {
-        return sPluginName;
-    }
+    const String &D3D11Plugin::getName() const { return sPluginName; }
     //---------------------------------------------------------------------
-    void D3D11Plugin::install()
+    void D3D11Plugin::install( const NameValuePairList * )
     {
         // Create the DirectX 11 rendering api
         mRenderSystem = new D3D11RenderSystem();
@@ -66,6 +61,6 @@ namespace Ogre
         delete mRenderSystem;
         mRenderSystem = 0;
     }
-
-
-}
+    //---------------------------------------------------------------------
+    void D3D11Plugin::getAbiCookie( AbiCookie &outAbiCookie ) { outAbiCookie = generateAbiCookie(); }
+}  // namespace Ogre

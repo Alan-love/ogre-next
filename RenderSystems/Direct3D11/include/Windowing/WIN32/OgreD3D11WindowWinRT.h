@@ -31,8 +31,11 @@ THE SOFTWARE.
 
 #include "OgreD3D11Window.h"
 
-#if OGRE_PLATFORM == OGRE_PLATFORM_WINRT 
+#if OGRE_PLATFORM == OGRE_PLATFORM_WINRT && defined( __cplusplus_winrt )
 #    include <agile.h>
+#elif OGRE_PLATFORM == OGRE_PLATFORM_WINRT && !defined( __cplusplus_winrt )
+#    include <winrt/Windows.UI.Core.h>
+#    include <winrt/Windows.UI.Xaml.Controls.h>
 #endif
 
 namespace Ogre
@@ -41,54 +44,75 @@ namespace Ogre
     class D3D11WindowCoreWindow : public D3D11WindowSwapChainBased
     {
     protected:
+#    if defined( __cplusplus_winrt )
         Platform::Agile<Windows::UI::Core::CoreWindow> mCoreWindow;
+#    else
+        winrt::agile_ref<winrt::Windows::UI::Core::CoreWindow> mCoreWindow;
+#    endif
 
     protected:
         virtual HRESULT _createSwapChainImpl();
 
     public:
-        D3D11WindowCoreWindow( const String &title, uint32 width, uint32 height,
-                         bool fullscreenMode, PixelFormatGpu depthStencilFormat,
-                         const NameValuePairList *miscParams,
-                         D3D11Device &device, D3D11RenderSystem *renderSystem );
+        D3D11WindowCoreWindow( const String &title, uint32 width, uint32 height, bool fullscreenMode,
+                               PixelFormatGpu depthStencilFormat, const NameValuePairList *miscParams,
+                               D3D11Device &device, D3D11RenderSystem *renderSystem );
         virtual ~D3D11WindowCoreWindow();
         virtual void destroy();
 
-        Windows::UI::Core::CoreWindow^ getCoreWindow() const    { return mCoreWindow.Get(); }
+#    if defined( __cplusplus_winrt )
+        Windows::UI::Core::CoreWindow ^ getCoreWindow() const { return mCoreWindow.Get(); }
+#    else
+        winrt::Windows::UI::Core::CoreWindow getCoreWindow() const { return mCoreWindow.get(); }
+#    endif
 
         virtual float getViewPointToPixelScale() const;
-        virtual void windowMovedOrResized();
-        virtual bool isVisible() const;
+        virtual void  windowMovedOrResized();
+        virtual bool  isVisible() const;
     };
 #endif
 
-#if OGRE_PLATFORM == OGRE_PLATFORM_WINRT && defined(_WIN32_WINNT_WINBLUE) && _WIN32_WINNT >= _WIN32_WINNT_WINBLUE
+#if OGRE_PLATFORM == OGRE_PLATFORM_WINRT && defined( _WIN32_WINNT_WINBLUE ) && \
+    _WIN32_WINNT >= _WIN32_WINNT_WINBLUE
     class D3D11WindowSwapChainPanel : public D3D11WindowSwapChainBased
     {
     protected:
-        Windows::UI::Xaml::Controls::SwapChainPanel^ mSwapChainPanel;
-        Windows::Foundation::Size mCompositionScale;
+#    if defined( __cplusplus_winrt )
+        Windows::UI::Xaml::Controls::SwapChainPanel ^ mSwapChainPanel;
+        Windows::Foundation::Size                   mCompositionScale;
         Windows::Foundation::EventRegistrationToken sizeChangedToken, compositionScaleChangedToken;
+#    else
+        winrt::Windows::UI::Xaml::Controls::SwapChainPanel mSwapChainPanel{ nullptr };
+        winrt::Windows::Foundation::Size                   mCompositionScale;
+        winrt::event_token sizeChangedToken, compositionScaleChangedToken;
+#    endif
 
     protected:
         virtual HRESULT _createSwapChainImpl();
-        virtual void _destroySwapChain();
-        HRESULT _compensateSwapChainCompositionScale();
+        virtual void    _destroySwapChain();
+        HRESULT         _compensateSwapChainCompositionScale();
 
     public:
-        D3D11WindowSwapChainPanel( const String &title, uint32 width, uint32 height,
-                         bool fullscreenMode, PixelFormatGpu depthStencilFormat,
-                         const NameValuePairList *miscParams,
-                         D3D11Device &device, D3D11RenderSystem *renderSystem );
+        D3D11WindowSwapChainPanel( const String &title, uint32 width, uint32 height, bool fullscreenMode,
+                                   PixelFormatGpu           depthStencilFormat,
+                                   const NameValuePairList *miscParams, D3D11Device &device,
+                                   D3D11RenderSystem *renderSystem );
         virtual ~D3D11WindowSwapChainPanel();
         virtual void destroy();
 
-        Windows::UI::Xaml::Controls::SwapChainPanel^ getSwapChainPanel() const    { return mSwapChainPanel; }
+#    if defined( __cplusplus_winrt )
+        Windows::UI::Xaml::Controls::SwapChainPanel ^ getSwapChainPanel() const
+#    else
+        winrt::Windows::UI::Xaml::Controls::SwapChainPanel getSwapChainPanel() const
+#    endif
+        {
+            return mSwapChainPanel;
+        }
 
         virtual float getViewPointToPixelScale() const;
-        virtual void windowMovedOrResized();
-        virtual bool isVisible() const;
+        virtual void  windowMovedOrResized();
+        virtual bool  isVisible() const;
     };
 #endif
-}
+}  // namespace Ogre
 #endif

@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "OgreVulkanUtils.h"
 
 #include "OgreLogManager.h"
-//#include "OgreVulkanProgram.h"
+// #include "OgreVulkanProgram.h"
 
 namespace Ogre
 {
@@ -105,22 +105,29 @@ namespace Ogre
             mRootLayouts.clear();
         }
 
-        {
-            DescriptorSetMap::const_iterator itor = mDescriptorSetMap.begin();
-            DescriptorSetMap::const_iterator endt = mDescriptorSetMap.end();
-
-            while( itor != endt )
-            {
-                vkDestroyDescriptorSetLayout( mDevice->mDevice, itor->second, 0 );
-                ++itor;
-            }
-
-            mDescriptorSetMap.clear();
-        }
+        destroyDescriptorSetLayouts();
 
         // Unregister with resource group manager
         ResourceGroupManager::getSingleton()._unregisterResourceManager( mResourceType );
     }
+    //-------------------------------------------------------------------------
+    void VulkanGpuProgramManager::destroyDescriptorSetLayouts()
+    {
+        DescriptorSetMap::const_iterator itor = mDescriptorSetMap.begin();
+        DescriptorSetMap::const_iterator endt = mDescriptorSetMap.end();
+
+        while( itor != endt )
+        {
+            vkDestroyDescriptorSetLayout( mDevice->mDevice, itor->second, 0 );
+            ++itor;
+        }
+
+        mDescriptorSetMap.clear();
+    }
+    //-------------------------------------------------------------------------
+    void VulkanGpuProgramManager::notifyDeviceLost() { destroyDescriptorSetLayouts(); }
+    //-------------------------------------------------------------------------
+    void VulkanGpuProgramManager::notifyDeviceRestored( unsigned pass ) {}
     //-------------------------------------------------------------------------
     bool VulkanGpuProgramManager::registerProgramFactory( const String &syntaxCode,
                                                           CreateGpuProgramCallback createFn )
@@ -135,6 +142,7 @@ namespace Ogre
     //-------------------------------------------------------------------------
     VkDescriptorSetLayout VulkanGpuProgramManager::getCachedSet( const VulkanSingleSetLayoutDesc &set )
     {
+        ScopedLock lock( mMutexRootLayouts );
         VkDescriptorSetLayout retVal = 0;
 
         DescriptorSetMap::const_iterator itor = mDescriptorSetMap.find( set );
@@ -148,7 +156,7 @@ namespace Ogre
 
             VkResult result =
                 vkCreateDescriptorSetLayout( mDevice->mDevice, &descSetLayoutCi, 0, &retVal );
-            checkVkResult( result, "vkCreateDescriptorSetLayout" );
+            checkVkResult( mDevice, result, "vkCreateDescriptorSetLayout" );
             mDescriptorSetMap[set] = retVal;
         }
         else
@@ -161,6 +169,7 @@ namespace Ogre
     //-------------------------------------------------------------------------
     VulkanRootLayout *VulkanGpuProgramManager::getRootLayout( const RootLayout &rootLayout )
     {
+        ScopedLock lock( mMutexRootLayouts );
         VulkanRootLayout *retVal = 0;
 
         mTmpRootLayout->copyFrom( rootLayout );
@@ -185,6 +194,7 @@ namespace Ogre
                                                               const bool bCompute,
                                                               const String &filename )
     {
+        ScopedLock lock( mMutexRootLayouts );
         VulkanRootLayout *retVal = 0;
 
         mTmpRootLayout->parseRootLayout( rootLayout, bCompute, filename );

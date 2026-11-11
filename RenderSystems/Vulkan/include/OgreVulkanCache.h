@@ -31,13 +31,15 @@ THE SOFTWARE.
 
 #include "OgreVulkanPrerequisites.h"
 
+#include "OgreVulkanDeviceResource.h"
+
 #include "vulkan/vulkan_core.h"
 
 namespace Ogre
 {
     /**
      */
-    class _OgreVulkanExport VulkanCache : public RenderSysAlloc
+    class _OgreVulkanExport VulkanCache final : public OgreAllocatedObj, protected VulkanDeviceResource
     {
     protected:
         struct VkRenderPassCreateInfoCmp
@@ -61,11 +63,17 @@ namespace Ogre
         typedef map<VkRenderPassCreateInfo, VkRenderPass, VkRenderPassCreateInfoCmp>::type
             VkRenderPassMap;
 
-        VkRenderPassMap mRenderPassCache;
+        VkRenderPassMap mRenderPassCache;  // GUARDED_BY( mRenderPassCache )
+        LightweightMutex mMutex;
 
         static void copySubpass( const VkAttachmentReference **dstStruct,
                                  const VkAttachmentReference *src, uint32_t attachmentCount,
                                  VkAttachmentReference *memoryBuffer, size_t &assignedIdx );
+
+        void destroy();
+
+        void notifyDeviceLost() override;
+        void notifyDeviceRestored( unsigned pass ) override;
 
     public:
         VulkanCache( VulkanDevice *device );

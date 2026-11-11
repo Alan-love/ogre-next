@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "OgreResourceTransition.h"
 
+#include "OgrePixelFormatGpuUtils.h"
 #include "OgreRenderSystem.h"
 #include "OgreTextureGpu.h"
 #include "OgreTextureGpuManager.h"
@@ -96,16 +97,24 @@ namespace Ogre
             {
                 // The layout the texture is currently in does not match our records.
                 // This can mean either of two things:
-                //  1. Texture was transitioned outside BarrierSolver's knowledge
+                //  1. Texture was transitioned outside BarrierSolver's knowledge.
+                //     This is wrong and bConsistentOldRecord = false.
                 //
                 //  2. User called resolveTransition() twice on this texture
                 //     without executing the transition yet. Thus 'lastKnownLayout'
                 //     contains the layout we will transition to. So we need
                 //     to check the current layout matches the *old* record,
                 //     not the future one.
-                //     That's what we're checking here.
+                //     This is allowed and that's what we're checking here.
+                //     bConsistentOldRecord = true in this case.
                 bConsistentOldRecord = renderSystem->isSameLayout(
                     itor->oldLayout, texture->getCurrentLayout(), texture, true );
+
+                // Discardable textures will return whatever in texture->getCurrentLayout(), but
+                // itor->oldLayout will be ResourceLayout::Undefined if last time resolveTransition()
+                // was called was in a new frame. We need to allow this.
+                if( texture->isDiscardableContent() && itor->oldLayout == ResourceLayout::Undefined )
+                    bConsistentOldRecord = true;
             }
         }
 
@@ -146,8 +155,6 @@ namespace Ogre
                 access == ResourceAccess::Read ) ) &&
             "Invalid Layout-access pair" );
 
-        OGRE_ASSERT_MEDIUM( access != ResourceAccess::Undefined );
-
         ResourceStatusMap::iterator itor = mResourceStatus.find( texture );
 
         if( itor == mResourceStatus.end() )
@@ -156,13 +163,23 @@ namespace Ogre
             status.layout = newLayout;
             status.access = access;
             status.stageMask = stageMask;
-            mResourceStatus.insert( ResourceStatusMap::value_type( texture, status ) );
+            mResourceStatus.emplace( texture, status );
 
             ResourceTransition resTrans;
             resTrans.resource = texture;
             if( texture->isDiscardableContent() )
             {
-                resTrans.oldLayout = ResourceLayout::Undefined;
+                if( texture->isRenderWindowSpecific() &&
+                    PixelFormatGpuUtils::isAccessible( texture->getPixelFormat() ) )
+                {
+                    // This is a swapchain (depth & stencil textures should not reach here).
+                    resTrans.oldLayout = ResourceLayout::Undefined;
+                }
+                else
+                {
+                    resTrans.oldLayout = texture->getCurrentLayout();
+                }
+
                 if( access == ResourceAccess::Read )
                 {
                     OGRE_EXCEPT(
@@ -194,10 +211,8 @@ namespace Ogre
                                            itor->second.layout );
 #endif
 
-            if( !renderSystem->isSameLayout( itor->second.layout, newLayout, texture, false ) ||
-                ( newLayout == ResourceLayout::Uav &&  //
-                  ( access != ResourceAccess::Read ||  //
-                    itor->second.access != ResourceAccess::Read ) ) )
+            if( access != ResourceAccess::Read || itor->second.access != ResourceAccess::Read ||
+                !renderSystem->isSameLayout( itor->second.layout, newLayout, texture, false ) )
             {
                 ResourceTransition resTrans;
                 resTrans.resource = texture;
@@ -234,7 +249,7 @@ namespace Ogre
             status.layout = ResourceLayout::Undefined;
             status.access = access;
             status.stageMask = stageMask;
-            mResourceStatus.insert( ResourceStatusMap::value_type( bufferRes, status ) );
+            mResourceStatus.emplace( bufferRes, status );
 
             // No transition. There's nothing to wait for and unlike textures,
             // buffers have no layout to transition to

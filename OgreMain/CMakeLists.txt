@@ -8,10 +8,10 @@
 #-------------------------------------------------------------------
 
 ############################################################
-# OgreMain core library
+# OgreNextMain core library
 ############################################################
 
-PROJECT(OgreMain)
+PROJECT(${OGRE_NEXT}Main)
 
 function( add_filtered_h filterName fileString )
 	file(GLOB TMP_FILES ${fileString})
@@ -62,12 +62,14 @@ add_filtered_std("Compositor/Pass/PassShadows")
 add_filtered_std("Compositor/Pass/PassStencil")
 add_filtered_std("Compositor/Pass/PassTargetBarrier")
 add_filtered_std("Compositor/Pass/PassUav")
+add_filtered_std("Compositor/Pass/PassWarmUp")
 add_filtered_std("Compute")
 add_filtered_std("debugbreak")
 add_filtered_std("Hash")
 add_filtered_std("Math/Array")
 add_filtered_std("Math/Simple")
 add_filtered_std("Math/Simple/C")
+add_filtered_std("ParticleSystem")
 add_filtered_std("ogrestd")
 add_filtered_std("Vao")
 
@@ -126,6 +128,7 @@ if (EMSCRIPTEN)
 elseif (WIN32)
   set(THREAD_SOURCE_FILES
       src/Threading/OgreBarrierWin.cpp
+      src/Threading/OgreCondVariableWin32.cpp
 	  src/Threading/OgreLightweightMutexWin.cpp
       src/Threading/OgreThreadsWin.cpp
   )
@@ -235,7 +238,7 @@ elseif (UNIX)
 		file(GLOB PLATFORM_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/GLX/*.cpp"
 		  src/OgreSearchOps.cpp)
 
-		set(PLATFORM_LIBS ${X11_LIBRARIES} ${X11_Xt_LIB} ${XAW_LIBRARY} ${X11_Xrandr_LIB} pthread)
+		set(PLATFORM_LIBS ${X11_LIBRARIES} ${X11_Xt_LIB} ${XAW_LIBRARY} ${X11_Xrandr_LIB} xcb pthread)
 		set(PLATFORM_HEADER_INSTALL "GLX")
 	else()
 		file(GLOB PLATFORM_HEADERS
@@ -262,7 +265,8 @@ endif()
 if (NOT WIN32)
   set(THREAD_SOURCE_FILES
       src/Threading/OgreBarrierPThreads.cpp
-	  src/Threading/OgreLightweightMutexPThreads.cpp
+      src/Threading/OgreCondVariablePThreads.cpp
+      src/Threading/OgreLightweightMutexPThreads.cpp
       src/Threading/OgreThreadsPThreads.cpp
   )
 endif()
@@ -271,11 +275,22 @@ list( APPEND THREAD_SOURCE_FILES
 	src/Threading/OgreWaitableEvent.cpp
 )
 
+if( APPLE )
+	list( APPEND THREAD_SOURCE_FILES
+		src/Threading/OgreSemaphoreApple.mm
+	)
+else()
+	list( APPEND THREAD_SOURCE_FILES
+		src/Threading/OgreSemaphore.cpp
+	)
+endif()
+
 
 # Configure threading files
 set(THREAD_HEADER_FILES
 	include/Threading/OgreBarrier.h
 	include/Threading/OgreLightweightMutex.h
+	include/Threading/OgreSemaphore.h
 	include/Threading/OgreThreadDefines.h
 	include/Threading/OgreThreadHeaders.h
 	include/Threading/OgreThreads.h
@@ -322,9 +337,8 @@ endif ()
 
 list(APPEND HEADER_FILES ${THREAD_HEADER_FILES})
 
-# Add needed definitions and nedmalloc include dir
+# Add needed definitions
 add_definitions(-DOGRE_NONCLIENT_BUILD -DFREEIMAGE_LIB -D_MT -D_USRDLL)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/nedmalloc)
 
 set(LIBRARIES ${PLATFORM_LIBS})
 
@@ -386,23 +400,28 @@ endif ()
 
 set (TARGET_LINK_FLAGS "")
 
+set( BROKEN_FILES_IN_UNITY_BUILD "src/OgreFreeImageCodec2.cpp" )
+
 # setup OgreMain target
 if (WINDOWS_STORE OR WINDOWS_PHONE)
 	# exclude OgreTimer.cpp from unity builds; causes problem
-	ogre_add_library(OgreMain ${OGRE_LIB_TYPE} ${PREC_HEADER} ${HEADER_FILES} ${SOURCE_FILES} ${PLATFORM_HEADERS} ${PLATFORM_SOURCE_FILES} ${THREAD_HEADER_FILES} ${THREAD_SOURCE_FILES} SEPARATE "src/WIN32/OgreTimer.cpp")
+	list( APPEND BROKEN_FILES_IN_UNITY_BUILD
+			"src/WIN32/OgreTimer.cpp" )
 else ()
-	# exclude OgreAlignedAllocator.cpp from unity builds; causes problems on Linux
-	ogre_add_library(OgreMain ${OGRE_LIB_TYPE} ${PREC_HEADER} ${HEADER_FILES} ${SOURCE_FILES} ${PLATFORM_HEADERS} ${PLATFORM_SOURCE_FILES} ${THREAD_HEADER_FILES} ${THREAD_SOURCE_FILES} SEPARATE "src/OgreAlignedAllocator.cpp")
+	# exclude these from unity builds; cause problems
+	list( APPEND BROKEN_FILES_IN_UNITY_BUILD
+			"${CMAKE_CURRENT_SOURCE_DIR}/src/OgreAlignedAllocator.cpp"
+	)
+	if( UNIX AND NOT OGRE_CONFIG_UNIX_NO_X11 AND NOT ANDROID AND NOT APPLE )
+		# These files cause problems on Linux
+		list( APPEND BROKEN_FILES_IN_UNITY_BUILD
+				"${CMAKE_CURRENT_SOURCE_DIR}/src/GLX/OgreConfigDialog.cpp"
+		)
+	endif()
 endif ()
-# In visual studio 2010 - 64 bit we get this error: "LINK : fatal error LNK1210: exceeded internal ILK size limit; link with /INCREMENTAL:NO"
-if(WIN32 AND MSVC10 AND CMAKE_CL_64)
-  set_target_properties(OgreMain PROPERTIES 
-                        VERSION ${OGRE_SOVERSION}
-                        LINK_FLAGS "/INCREMENTAL:NO"
-                      )
-else()
-  set_target_properties(OgreMain PROPERTIES VERSION ${OGRE_SOVERSION} SOVERSION ${OGRE_SOVERSION})
-endif()
+ogre_add_library(${OGRE_NEXT}Main ${OGRE_LIB_TYPE} ${PREC_HEADER} ${HEADER_FILES} ${SOURCE_FILES} ${PLATFORM_HEADERS} ${PLATFORM_SOURCE_FILES} ${THREAD_HEADER_FILES} ${THREAD_SOURCE_FILES} SEPARATE ${BROKEN_FILES_IN_UNITY_BUILD})
+
+set_target_properties(${OGRE_NEXT}Main PROPERTIES VERSION ${OGRE_SOVERSION} SOVERSION ${OGRE_SOVERSION})
 
 if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   if(OGRE_GCC_VERSION VERSION_EQUAL 4.8 OR OGRE_GCC_VERSION VERSION_GREATER 4.8)
@@ -416,77 +435,72 @@ endif()
 
 if (APPLE)
   if (OGRE_BUILD_PLATFORM_APPLE_IOS)
-    set_target_properties(OgreMain PROPERTIES INSTALL_NAME_DIR "OGRE")
+    set_target_properties(${OGRE_NEXT}Main PROPERTIES INSTALL_NAME_DIR "OGRE")
   else ()
-    set_target_properties(OgreMain PROPERTIES
+    set_target_properties(${OGRE_NEXT}Main PROPERTIES
         LINK_FLAGS "-framework IOKit -framework Cocoa -framework Carbon -framework OpenGL -framework CoreVideo"
     )
 
-    set(OGRE_OSX_BUILD_CONFIGURATION "$(PLATFORM_NAME)/$(CONFIGURATION)")
-  
-  	add_custom_command(TARGET OgreMain POST_BUILD
-		COMMAND mkdir ARGS -p ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/Threading
-        COMMAND ditto 
-		${OGRE_SOURCE_DIR}/OgreMain/include/Threading/*.h ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/Threading
-		COMMAND mkdir ARGS -p ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/OSX
-        COMMAND ditto 
-		${OGRE_SOURCE_DIR}/OgreMain/include/OSX/*.h ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/OSX
-		COMMAND cd ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers
-		)
+    if (OGRE_BUILD_LIBS_AS_FRAMEWORKS)
+      set(OGRE_OSX_BUILD_CONFIGURATION "$(PLATFORM_NAME)/$(CONFIGURATION)")
 
-    foreach(HEADER_PATH ${THREAD_HEADER_FILES})
-        get_filename_component(HEADER_FILE ${HEADER_PATH} NAME)
-        set(FWK_HEADER_PATH ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/${HEADER_FILE})
-        add_custom_command(TARGET OgreMain POST_BUILD
-            COMMAND rm -f ${FWK_HEADER_PATH}
-            )
-    endforeach()
+      add_custom_command(TARGET ${OGRE_NEXT}Main POST_BUILD
+          COMMAND mkdir ARGS -p ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/Threading
+          COMMAND ditto
+          ${OGRE_SOURCE_DIR}/OgreMain/include/Threading/*.h ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/Threading
+          COMMAND mkdir ARGS -p ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/OSX
+          COMMAND ditto
+          ${OGRE_SOURCE_DIR}/OgreMain/include/OSX/*.h ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/OSX
+          COMMAND cd ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers
+          )
 
-    foreach(HEADER_PATH ${PLATFORM_HEADERS})
-        get_filename_component(HEADER_FILE ${HEADER_PATH} NAME)
-        set(FWK_HEADER_PATH ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/${HEADER_FILE})
-        add_custom_command(TARGET OgreMain POST_BUILD
-            COMMAND rm -f ${FWK_HEADER_PATH}
-            )
-    endforeach()
+      foreach(HEADER_PATH ${THREAD_HEADER_FILES})
+          get_filename_component(HEADER_FILE ${HEADER_PATH} NAME)
+          set(FWK_HEADER_PATH ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/${HEADER_FILE})
+          add_custom_command(TARGET ${OGRE_NEXT}Main POST_BUILD
+              COMMAND rm -f ${FWK_HEADER_PATH}
+              )
+      endforeach()
 
-    ogre_config_framework(OgreMain)
+      foreach(HEADER_PATH ${PLATFORM_HEADERS})
+          get_filename_component(HEADER_FILE ${HEADER_PATH} NAME)
+          set(FWK_HEADER_PATH ${OGRE_BINARY_DIR}/lib/${OGRE_OSX_BUILD_CONFIGURATION}/Ogre.framework/Headers/${HEADER_FILE})
+          add_custom_command(TARGET ${OGRE_NEXT}Main POST_BUILD
+              COMMAND rm -f ${FWK_HEADER_PATH}
+              )
+      endforeach()
+    endif ()
+
+    ogre_config_framework(${OGRE_NEXT}Main)
   endif ()
 
   # Framework is called 'Ogre'
   if (OGRE_BUILD_LIBS_AS_FRAMEWORKS)
-    set_target_properties(OgreMain PROPERTIES	OUTPUT_NAME Ogre)
+    set_target_properties(${OGRE_NEXT}Main PROPERTIES	OUTPUT_NAME ${OGRE_NEXT})
   endif ()
 endif ()
-target_link_libraries(OgreMain ${LIBRARIES})
+target_link_libraries(${OGRE_NEXT}Main ${LIBRARIES})
 if (MINGW)
   # may need winsock htons functions for FreeImage
-  target_link_libraries(OgreMain ws2_32)
+  target_link_libraries(${OGRE_NEXT}Main ws2_32)
 endif ()
 
-#set_source_files_properties( ${SOURCE_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
-#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/OgreItem.cpp" PROPERTIES HEADER_FILE_ONLY FALSE)
-#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/OgreMesh.cpp" PROPERTIES HEADER_FILE_ONLY FALSE)
-#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/OgreMesh2.cpp" PROPERTIES HEADER_FILE_ONLY FALSE)
-#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/OgreSubMesh2.cpp" PROPERTIES HEADER_FILE_ONLY FALSE)
-
 # specify a precompiled header to use
-use_precompiled_header(OgreMain 
+use_precompiled_header(${OGRE_NEXT}Main
   "${CMAKE_CURRENT_SOURCE_DIR}/include/OgreStableHeaders.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/OgrePrecompiledHeaders.cpp"
 )
 
-# install OgreMain
-ogre_config_lib(OgreMain TRUE)
+ogre_config_lib(${OGRE_NEXT}Main TRUE)
 foreach(HEADER_FILE ${HEADER_FILES})
 	string(REGEX REPLACE "((${CMAKE_CURRENT_SOURCE_DIR}|${OGRE_BINARY_DIR})/)?(include|src)/" "" RELATIVE_HEADER_FILE ${HEADER_FILE})
 	string(REGEX MATCH "((.*)/)+" HEADER_SUBDIRECTORY ${RELATIVE_HEADER_FILE})
-	install(FILES ${HEADER_FILE} DESTINATION include/OGRE/${HEADER_SUBDIRECTORY})
+	install(FILES ${HEADER_FILE} DESTINATION include/${OGRE_NEXT_PREFIX}/${HEADER_SUBDIRECTORY})
 endforeach()
 
 install(FILES ${PLATFORM_HEADERS}
-  DESTINATION include/OGRE/${PLATFORM_HEADER_INSTALL}
+  DESTINATION include/${OGRE_NEXT_PREFIX}/${PLATFORM_HEADER_INSTALL}
 )
 install(FILES ${THREAD_HEADER_FILES}
-	DESTINATION include/OGRE/Threading
+	DESTINATION include/${OGRE_NEXT_PREFIX}/Threading
 )

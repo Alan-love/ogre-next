@@ -27,13 +27,12 @@ THE SOFTWARE.
 */
 #include "OgreStableHeaders.h"
 
+#include "OgreRenderSystemCapabilitiesManager.h"
+
 #include "OgreStringVector.h"
 #include "OgreArchiveManager.h"
 #include "OgreArchive.h"
-#include "OgreRenderSystemCapabilitiesManager.h"
 #include "OgreRenderSystemCapabilitiesSerializer.h"
-
-
 
 namespace Ogre {
 
@@ -94,7 +93,7 @@ namespace Ogre {
     /** Method used by RenderSystemCapabilitiesSerializer::parseScript */
     void RenderSystemCapabilitiesManager::_addRenderSystemCapabilities(const String& name, RenderSystemCapabilities* caps)
     {
-        mCapabilitiesMap.insert(CapabilitiesMap::value_type(name, caps));
+        mCapabilitiesMap.emplace( name, caps );
     }
 }
 

@@ -29,10 +29,10 @@ THE SOFTWARE.
 #ifndef _OgreCompositorPassIblSpecular_H_
 #define _OgreCompositorPassIblSpecular_H_
 
-#include "OgreHeaderPrefix.h"
-
 #include "Compositor/Pass/OgreCompositorPass.h"
 #include "Compositor/Pass/PassIblSpecular/OgreCompositorPassIblSpecularDef.h"
+
+#include "OgreHeaderPrefix.h"
 
 namespace Ogre
 {
@@ -59,7 +59,7 @@ namespace Ogre
     protected:
         struct JobWithBarrier
         {
-            HlmsComputeJob *job;
+            HlmsComputeJob    *job;
             ResourceTransition resourceTransition;
         };
 
@@ -71,6 +71,8 @@ namespace Ogre
 
         void setupComputeShaders();
         void destroyComputeShaders();
+
+        float lodToPerceptualRoughness( float lod ) const;
 
         void analyzeBarriers( const bool bClearBarriers = true ) override;
 

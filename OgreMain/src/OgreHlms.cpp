@@ -29,42 +29,40 @@ THE SOFTWARE.
 #include "OgreStableHeaders.h"
 
 #include "OgreHlms.h"
-#include "OgreHlmsManager.h"
-
-#include "OgreHighLevelGpuProgramManager.h"
-#include "OgreHighLevelGpuProgram.h"
-#include "OgreRootLayout.h"
-
-#include "Vao/OgreVaoManager.h"
-#include "Vao/OgreVertexArrayObject.h"
 
 #include "Compositor/OgreCompositorShadowNode.h"
 #include "Compositor/Pass/PassScene/OgreCompositorPassSceneDef.h"
-
-#include "OgreLight.h"
-#include "OgreSceneManager.h"
-#include "OgreLogManager.h"
-#include "OgreForward3D.h"
-#include "OgreCamera.h"
-//#include "OgreMovableObject.h"
-//#include "OgreRenderable.h"
-#include "OgreViewport.h"
-#include "OgreDepthBuffer.h"
-#include "OgrePixelFormatGpuUtils.h"
-#include "OgreLwString.h"
-#include "OgreRenderQueue.h"
-
-#include "OgreHlmsListener.h"
 #include "OgreBitset.inl"
-
+#include "OgreCamera.h"
+#include "OgreConfigFile.h"
+#include "OgreDepthBuffer.h"
 #include "OgreFileSystem.h"
+#include "OgreForward3D.h"
+#include "OgreHighLevelGpuProgram.h"
+#include "OgreHighLevelGpuProgramManager.h"
+#include "OgreHlmsListener.h"
+#include "OgreHlmsManager.h"
+#include "OgreLight.h"
+#include "OgreLogManager.h"
+#include "OgreLwString.h"
+#include "OgrePixelFormatGpuUtils.h"
 #include "OgreProfiler.h"
+#include "OgreRenderQueue.h"
+#include "OgreRootLayout.h"
+#include "OgreSceneManager.h"
+#include "OgreViewport.h"
+#include "ParticleSystem/OgreParticleSystem2.h"
+#include "Vao/OgreVaoManager.h"
+#include "Vao/OgreVertexArrayObject.h"
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE
-    #include "OSX/macUtils.h"
+#    include "OSX/macUtils.h"
 #endif
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
-    #include "iOS/macUtils.h"
+#    include "iOS/macUtils.h"
+#endif
+#if OGRE_PLATFORM == OGRE_PLATFORM_WINRT && !defined( __cplusplus_winrt )
+#    include <winrt/Windows.Storage.h>
 #endif
 
 #include "Hash/MurmurHash3.h"
@@ -72,200 +70,237 @@ THE SOFTWARE.
 #include <fstream>
 
 #if OGRE_ARCH_TYPE == OGRE_ARCHITECTURE_32
-    #define OGRE_HASH128_FUNC MurmurHash3_x86_128
+#    define OGRE_HASH128_FUNC MurmurHash3_x86_128
 #else
-    #define OGRE_HASH128_FUNC MurmurHash3_x64_128
+#    define OGRE_HASH128_FUNC MurmurHash3_x64_128
 #endif
 
 namespace Ogre
 {
-    const int HlmsBits::HlmsTypeBits    = 3;
-    const int HlmsBits::RenderableBits  = 21;
-    const int HlmsBits::PassBits        = 8;
+    const int HlmsBits::HlmsTypeBits = 3;
+    const int HlmsBits::RenderableBits = 21;
+    const int HlmsBits::PassBits = 8;
 
-    const int HlmsBits::HlmsTypeShift   = 32 - HlmsTypeBits;
+    const int HlmsBits::HlmsTypeShift = 32 - HlmsTypeBits;
     const int HlmsBits::RenderableShift = HlmsTypeShift - RenderableBits;
-    const int HlmsBits::PassShift       = RenderableShift - PassBits;
+    const int HlmsBits::PassShift = RenderableShift - PassBits;
 
-    const int HlmsBits::RendarebleHlmsTypeMask = (1 << (HlmsTypeBits + RenderableBits)) - 1;
-    const int HlmsBits::HlmsTypeMask    = (1 << HlmsTypeBits) - 1;
-    const int HlmsBits::RenderableMask  = (1 << RenderableBits) - 1;
-    const int HlmsBits::PassMask        = (1 << PassBits) - 1;
+    const int HlmsBits::RendarebleHlmsTypeMask = ( 1 << ( HlmsTypeBits + RenderableBits ) ) - 1;
+    const int HlmsBits::HlmsTypeMask = ( 1 << HlmsTypeBits ) - 1;
+    const int HlmsBits::RenderableMask = ( 1 << RenderableBits ) - 1;
+    const int HlmsBits::PassMask = ( 1 << PassBits ) - 1;
 
-    //Change per mesh (hash can be cached on the renderable)
-    const IdString HlmsBaseProp::Skeleton           = IdString( "hlms_skeleton" );
-    const IdString HlmsBaseProp::BonesPerVertex     = IdString( "hlms_bones_per_vertex" );
-    const IdString HlmsBaseProp::Pose               = IdString( "hlms_pose" );
-    const IdString HlmsBaseProp::PoseHalfPrecision  = IdString( "hlms_pose_half" );
-    const IdString HlmsBaseProp::PoseNormals        = IdString( "hlms_pose_normals" );
+    // Change per mesh (hash can be cached on the renderable)
+    const IdString HlmsBaseProp::Skeleton = IdString( "hlms_skeleton" );
+    const IdString HlmsBaseProp::BonesPerVertex = IdString( "hlms_bones_per_vertex" );
+    const IdString HlmsBaseProp::Pose = IdString( "hlms_pose" );
+    const IdString HlmsBaseProp::PoseHalfPrecision = IdString( "hlms_pose_half" );
+    const IdString HlmsBaseProp::PoseNormals = IdString( "hlms_pose_normals" );
 
-    const IdString HlmsBaseProp::Normal             = IdString( "hlms_normal" );
-    const IdString HlmsBaseProp::QTangent           = IdString( "hlms_qtangent" );
-    const IdString HlmsBaseProp::Tangent            = IdString( "hlms_tangent" );
-    const IdString HlmsBaseProp::Tangent4           = IdString( "hlms_tangent4" );
+    const IdString HlmsBaseProp::Normal = IdString( "hlms_normal" );
+    const IdString HlmsBaseProp::QTangent = IdString( "hlms_qtangent" );
+    const IdString HlmsBaseProp::Tangent = IdString( "hlms_tangent" );
+    const IdString HlmsBaseProp::Tangent4 = IdString( "hlms_tangent4" );
 
-    const IdString HlmsBaseProp::Colour             = IdString( "hlms_colour" );
+    const IdString HlmsBaseProp::Colour = IdString( "hlms_colour" );
 
-    const IdString HlmsBaseProp::IdentityWorld      = IdString( "hlms_identity_world" );
-    const IdString HlmsBaseProp::IdentityViewProj   = IdString( "hlms_identity_viewproj" );
-    const IdString HlmsBaseProp::IdentityViewProjDynamic= IdString( "hlms_identity_viewproj_dynamic" );
+    const IdString HlmsBaseProp::IdentityWorld = IdString( "hlms_identity_world" );
+    const IdString HlmsBaseProp::IdentityViewProj = IdString( "hlms_identity_viewproj" );
+    const IdString HlmsBaseProp::IdentityViewProjDynamic = IdString( "hlms_identity_viewproj_dynamic" );
 
-    const IdString HlmsBaseProp::UvCount            = IdString( "hlms_uv_count" );
-    const IdString HlmsBaseProp::UvCount0           = IdString( "hlms_uv_count0" );
-    const IdString HlmsBaseProp::UvCount1           = IdString( "hlms_uv_count1" );
-    const IdString HlmsBaseProp::UvCount2           = IdString( "hlms_uv_count2" );
-    const IdString HlmsBaseProp::UvCount3           = IdString( "hlms_uv_count3" );
-    const IdString HlmsBaseProp::UvCount4           = IdString( "hlms_uv_count4" );
-    const IdString HlmsBaseProp::UvCount5           = IdString( "hlms_uv_count5" );
-    const IdString HlmsBaseProp::UvCount6           = IdString( "hlms_uv_count6" );
-    const IdString HlmsBaseProp::UvCount7           = IdString( "hlms_uv_count7" );
-    
-    //Change per frame (grouped together with scene pass)
-    const IdString HlmsBaseProp::LightsDirectional  = IdString( "hlms_lights_directional" );
+    const IdString HlmsBaseProp::UvCount = IdString( "hlms_uv_count" );
+    const IdString HlmsBaseProp::UvCount0 = IdString( "hlms_uv_count0" );
+    const IdString HlmsBaseProp::UvCount1 = IdString( "hlms_uv_count1" );
+    const IdString HlmsBaseProp::UvCount2 = IdString( "hlms_uv_count2" );
+    const IdString HlmsBaseProp::UvCount3 = IdString( "hlms_uv_count3" );
+    const IdString HlmsBaseProp::UvCount4 = IdString( "hlms_uv_count4" );
+    const IdString HlmsBaseProp::UvCount5 = IdString( "hlms_uv_count5" );
+    const IdString HlmsBaseProp::UvCount6 = IdString( "hlms_uv_count6" );
+    const IdString HlmsBaseProp::UvCount7 = IdString( "hlms_uv_count7" );
+
+    // Change per frame (grouped together with scene pass)
+    const IdString HlmsBaseProp::LightsDirectional = IdString( "hlms_lights_directional" );
     const IdString HlmsBaseProp::LightsDirNonCaster = IdString( "hlms_lights_directional_non_caster" );
-    const IdString HlmsBaseProp::LightsPoint        = IdString( "hlms_lights_point" );
-    const IdString HlmsBaseProp::LightsSpot         = IdString( "hlms_lights_spot" );
-    const IdString HlmsBaseProp::LightsAreaApprox   = IdString( "hlms_lights_area_approx" );
-    const IdString HlmsBaseProp::LightsAreaLtc      = IdString( "hlms_lights_area_ltc" );
-    const IdString HlmsBaseProp::LightsAreaTexMask  = IdString( "hlms_lights_area_tex_mask" );
-    const IdString HlmsBaseProp::LightsAttenuation  = IdString( "hlms_lights_attenuation" );
-    const IdString HlmsBaseProp::LightsSpotParams   = IdString( "hlms_lights_spotparams" );
-    const IdString HlmsBaseProp::LightsAreaTexColour= IdString( "hlms_lights_area_tex_colour" );
-    const IdString HlmsBaseProp::AllPointLights     = IdString( "hlms_all_point_lights" );
+    const IdString HlmsBaseProp::LightsPoint = IdString( "hlms_lights_point" );
+    const IdString HlmsBaseProp::LightsSpot = IdString( "hlms_lights_spot" );
+    const IdString HlmsBaseProp::LightsAreaApprox = IdString( "hlms_lights_area_approx" );
+    const IdString HlmsBaseProp::LightsAreaLtc = IdString( "hlms_lights_area_ltc" );
+    const IdString HlmsBaseProp::LightsAreaTexMask = IdString( "hlms_lights_area_tex_mask" );
+    const IdString HlmsBaseProp::LightsAreaTexColour = IdString( "hlms_lights_area_tex_colour" );
+    const IdString HlmsBaseProp::AllPointLights = IdString( "hlms_all_point_lights" );
 
-    //Change per scene pass
-    const IdString HlmsBaseProp::PsoClipDistances	= IdString( "hlms_pso_clip_distances" );
-    const IdString HlmsBaseProp::GlobalClipPlanes	= IdString( "hlms_global_clip_planes" );
-    const IdString HlmsBaseProp::DualParaboloidMapping= IdString( "hlms_dual_paraboloid_mapping" );
-    const IdString HlmsBaseProp::InstancedStereo    = IdString( "hlms_instanced_stereo" );
+    // Change per scene pass
+    const IdString HlmsBaseProp::PsoClipDistances = IdString( "hlms_pso_clip_distances" );
+    const IdString HlmsBaseProp::GlobalClipPlanes = IdString( "hlms_global_clip_planes" );
+    const IdString HlmsBaseProp::EmulateClipDistances = IdString( "hlms_emulate_clip_distances" );
+    const IdString HlmsBaseProp::DualParaboloidMapping = IdString( "hlms_dual_paraboloid_mapping" );
+    const IdString HlmsBaseProp::InstancedStereo = IdString( "hlms_instanced_stereo" );
+    const IdString HlmsBaseProp::ViewMatrix = IdString( "hlms_view_matrix" );
     const IdString HlmsBaseProp::StaticBranchLights = IdString( "hlms_static_branch_lights" );
+    const IdString HlmsBaseProp::StaticBranchShadowMapLights =
+        IdString( "hlms_static_branch_shadow_map_lights" );
     const IdString HlmsBaseProp::NumShadowMapLights = IdString( "hlms_num_shadow_map_lights" );
-    const IdString HlmsBaseProp::NumShadowMapTextures= IdString("hlms_num_shadow_map_textures" );
-    const IdString HlmsBaseProp::PssmSplits         = IdString( "hlms_pssm_splits" );
-    const IdString HlmsBaseProp::PssmBlend          = IdString( "hlms_pssm_blend" );
-    const IdString HlmsBaseProp::PssmFade           = IdString( "hlms_pssm_fade" );
-    const IdString HlmsBaseProp::ShadowCaster       = IdString( "hlms_shadowcaster" );
-    const IdString HlmsBaseProp::ShadowCasterDirectional= IdString( "hlms_shadowcaster_directional" );
-    const IdString HlmsBaseProp::ShadowCasterPoint  = IdString( "hlms_shadowcaster_point" );
-    const IdString HlmsBaseProp::ShadowUsesDepthTexture= IdString( "hlms_shadow_uses_depth_texture" );
-    const IdString HlmsBaseProp::RenderDepthOnly    = IdString( "hlms_render_depth_only" );
-    const IdString HlmsBaseProp::FineLightMask      = IdString( "hlms_fine_light_mask" );
-    const IdString HlmsBaseProp::UseUvBaking        = IdString( "hlms_use_uv_baking" );
-    const IdString HlmsBaseProp::UvBaking           = IdString( "hlms_uv_baking" );
-    const IdString HlmsBaseProp::BakeLightingOnly   = IdString( "hlms_bake_lighting_only" );
-    const IdString HlmsBaseProp::GenNormalsGBuf     = IdString( "hlms_gen_normals_gbuffer" );
-    const IdString HlmsBaseProp::PrePass            = IdString( "hlms_prepass" );
-    const IdString HlmsBaseProp::UsePrePass         = IdString( "hlms_use_prepass" );
-    const IdString HlmsBaseProp::UsePrePassMsaa     = IdString( "hlms_use_prepass_msaa" );
-    const IdString HlmsBaseProp::UseSsr             = IdString( "hlms_use_ssr" );
+    const IdString HlmsBaseProp::NumShadowMapTextures = IdString( "hlms_num_shadow_map_textures" );
+    const IdString HlmsBaseProp::PssmSplits = IdString( "hlms_pssm_splits" );
+    const IdString HlmsBaseProp::PssmBlend = IdString( "hlms_pssm_blend" );
+    const IdString HlmsBaseProp::PssmFade = IdString( "hlms_pssm_fade" );
+    const IdString HlmsBaseProp::ShadowCaster = IdString( "hlms_shadowcaster" );
+    const IdString HlmsBaseProp::ShadowCasterDirectional = IdString( "hlms_shadowcaster_directional" );
+    const IdString HlmsBaseProp::ShadowCasterPoint = IdString( "hlms_shadowcaster_point" );
+    const IdString HlmsBaseProp::ShadowUsesDepthTexture = IdString( "hlms_shadow_uses_depth_texture" );
+    const IdString HlmsBaseProp::RenderDepthOnly = IdString( "hlms_render_depth_only" );
+    const IdString HlmsBaseProp::FineLightMask = IdString( "hlms_fine_light_mask" );
+    const IdString HlmsBaseProp::UseUvBaking = IdString( "hlms_use_uv_baking" );
+    const IdString HlmsBaseProp::UvBaking = IdString( "hlms_uv_baking" );
+    const IdString HlmsBaseProp::BakeLightingOnly = IdString( "hlms_bake_lighting_only" );
+    const IdString HlmsBaseProp::MsaaSamples = IdString( "hlms_msaa_samples" );
+    const IdString HlmsBaseProp::GenNormalsGBuf = IdString( "hlms_gen_normals_gbuffer" );
+    const IdString HlmsBaseProp::PrePass = IdString( "hlms_prepass" );
+    const IdString HlmsBaseProp::UsePrePass = IdString( "hlms_use_prepass" );
+    const IdString HlmsBaseProp::UsePrePassMsaa = IdString( "hlms_use_prepass_msaa" );
+    const IdString HlmsBaseProp::UseSsr = IdString( "hlms_use_ssr" );
     const IdString HlmsBaseProp::SsRefractionsAvailable = IdString( "hlms_ss_refractions_available" );
-    const IdString HlmsBaseProp::EnableVpls         = IdString( "hlms_enable_vpls" );
-    const IdString HlmsBaseProp::ForwardPlus        = IdString( "hlms_forwardplus" );
-    const IdString HlmsBaseProp::ForwardPlusFlipY   = IdString( "hlms_forwardplus_flipY" );
-    const IdString HlmsBaseProp::ForwardPlusDebug   = IdString( "hlms_forwardplus_debug" );
-    const IdString HlmsBaseProp::ForwardPlusFadeAttenRange
-                                                    = IdString( "hlms_forward_fade_attenuation_range" );
-    const IdString HlmsBaseProp::ForwardPlusFineLightMask
-                                                    = IdString( "hlms_forwardplus_fine_light_mask" );
-    const IdString HlmsBaseProp::ForwardPlusCoversEntireTarget
-                                                    = IdString("hlms_forwardplus_covers_entire_target");
+    const IdString HlmsBaseProp::EnableVpls = IdString( "hlms_enable_vpls" );
+    const IdString HlmsBaseProp::Fog = IdString( "hlms_fog" );
+    const IdString HlmsBaseProp::ForwardPlus = IdString( "hlms_forwardplus" );
+    const IdString HlmsBaseProp::ForwardPlusFlipY = IdString( "hlms_forwardplus_flipY" );
+    const IdString HlmsBaseProp::ForwardPlusDebug = IdString( "hlms_forwardplus_debug" );
+    const IdString HlmsBaseProp::ForwardPlusFadeAttenRange =
+        IdString( "hlms_forward_fade_attenuation_range" );
+    const IdString HlmsBaseProp::ForwardPlusFineLightMask =
+        IdString( "hlms_forwardplus_fine_light_mask" );
+    const IdString HlmsBaseProp::ForwardPlusCoversEntireTarget =
+        IdString( "hlms_forwardplus_covers_entire_target" );
     const IdString HlmsBaseProp::Forward3DNumSlices = IdString( "forward3d_num_slices" );
-    const IdString HlmsBaseProp::FwdClusteredWidthxHeight  = IdString( "fwd_clustered_width_x_height" );
-    const IdString HlmsBaseProp::FwdClusteredWidth         = IdString( "fwd_clustered_width" );
+    const IdString HlmsBaseProp::FwdClusteredWidthxHeight = IdString( "fwd_clustered_width_x_height" );
+    const IdString HlmsBaseProp::FwdClusteredWidth = IdString( "fwd_clustered_width" );
     const IdString HlmsBaseProp::FwdClusteredLightsPerCell = IdString( "fwd_clustered_lights_per_cell" );
-    const IdString HlmsBaseProp::EnableDecals       = IdString( "hlms_enable_decals" );
-    const IdString HlmsBaseProp::FwdPlusDecalsSlotOffset   = IdString( "hlms_forwardplus_decals_slot_offset" );
-    const IdString HlmsBaseProp::DecalsDiffuse      = IdString( "hlms_decals_diffuse" );
-    const IdString HlmsBaseProp::DecalsNormals      = IdString( "hlms_decals_normals" );
-    const IdString HlmsBaseProp::DecalsEmissive     = IdString( "hlms_decals_emissive" );
-    const IdString HlmsBaseProp::FwdPlusCubemapSlotOffset= IdString( "hlms_forwardplus_cubemap_slot_offset" );
-    const IdString HlmsBaseProp::Forward3D          = IdString( "forward3d" );
-    const IdString HlmsBaseProp::ForwardClustered   = IdString( "forward_clustered" );
-    const IdString HlmsBaseProp::VPos               = IdString( "hlms_vpos" );
-    const IdString HlmsBaseProp::ScreenPosInt       = IdString( "hlms_screen_pos_int" );
-    const IdString HlmsBaseProp::ScreenPosUv        = IdString( "hlms_screen_pos_uv" );
-    const IdString HlmsBaseProp::VertexId           = IdString( "hlms_vertex_id" );
+    const IdString HlmsBaseProp::EnableDecals = IdString( "hlms_enable_decals" );
+    const IdString HlmsBaseProp::FwdPlusDecalsSlotOffset =
+        IdString( "hlms_forwardplus_decals_slot_offset" );
+    const IdString HlmsBaseProp::DecalsDiffuse = IdString( "hlms_decals_diffuse" );
+    const IdString HlmsBaseProp::DecalsNormals = IdString( "hlms_decals_normals" );
+    const IdString HlmsBaseProp::DecalsEmissive = IdString( "hlms_decals_emissive" );
+    const IdString HlmsBaseProp::FwdPlusCubemapSlotOffset =
+        IdString( "hlms_forwardplus_cubemap_slot_offset" );
+    const IdString HlmsBaseProp::BlueNoise = IdString( "hlms_blue_noise" );
+    const IdString HlmsBaseProp::ParticleSystem = IdString( "hlms_particle_system" );
+    const IdString HlmsBaseProp::ParticleType = IdString( "hlms_particle_type" );
+    const IdString HlmsBaseProp::ParticleTypePoint = IdString( "particle_type_point" );
+    const IdString HlmsBaseProp::ParticleTypeOrientedCommon =
+        IdString( "particle_type_oriented_common" );
+    const IdString HlmsBaseProp::ParticleTypeOrientedSelf = IdString( "particle_type_oriented_self" );
+    const IdString HlmsBaseProp::ParticleTypePerpendicularCommon =
+        IdString( "particle_type_perpendicular_common" );
+    const IdString HlmsBaseProp::ParticleTypePerpendicularSelf =
+        IdString( "particle_type_perpendicular_self" );
+    const IdString HlmsBaseProp::ParticleRotation = IdString( "hlms_particle_rotation" );
+    const IdString HlmsBaseProp::Forward3D = IdString( "forward3d" );
+    const IdString HlmsBaseProp::ForwardClustered = IdString( "forward_clustered" );
+    const IdString HlmsBaseProp::VPos = IdString( "hlms_vpos" );
+    const IdString HlmsBaseProp::ScreenPosInt = IdString( "hlms_screen_pos_int" );
+    const IdString HlmsBaseProp::ScreenPosUv = IdString( "hlms_screen_pos_uv" );
+    const IdString HlmsBaseProp::VertexId = IdString( "hlms_vertex_id" );
 
-    //Change per material (hash can be cached on the renderable)
-    const IdString HlmsBaseProp::AlphaTest                 = IdString( "alpha_test" );
+    // Change per material (hash can be cached on the renderable)
+    const IdString HlmsBaseProp::AlphaTest = IdString( "alpha_test" );
     const IdString HlmsBaseProp::AlphaTestShadowCasterOnly = IdString( "alpha_test_shadow_caster_only" );
-    const IdString HlmsBaseProp::AlphaBlend                = IdString( "hlms_alphablend" );
-    const IdString HlmsBaseProp::AlphaToCoverage           = IdString( "hlms_alpha_to_coverage" );
-    const IdString HlmsBaseProp::ScreenSpaceRefractions    = IdString( "hlms_screen_space_refractions" );
+    const IdString HlmsBaseProp::AlphaBlend = IdString( "hlms_alphablend" );
+    const IdString HlmsBaseProp::AlphaToCoverage = IdString( "hlms_alpha_to_coverage" );
+    const IdString HlmsBaseProp::AlphaHash = IdString( "hlms_alpha_hash" );
+    const IdString HlmsBaseProp::AccurateNonUniformNormalScaling =
+        IdString( "hlms_accurate_non_uniform_normal_scaling" );
+    const IdString HlmsBaseProp::ScreenSpaceRefractions = IdString( "hlms_screen_space_refractions" );
+    // We use a different convention because it's a really private property that ideally
+    // shouldn't be exposed to users.
+    const IdString
+        HlmsBaseProp::_DatablockCustomPieceShaderName[CustomPieceStage::NumCustomPieceStages] = {
+            IdString( "_DatablockCustomPieceShaderNamePRE" ),
+            IdString( "_DatablockCustomPieceShaderNameVS" ),
+            IdString( "_DatablockCustomPieceShaderNamePS" ),
+            IdString( "_DatablockCustomPieceShaderNameGS" ),
+            IdString( "_DatablockCustomPieceShaderNameHS" ),
+            IdString( "_DatablockCustomPieceShaderNameDS" ),
+        };
 
     const IdString HlmsBaseProp::NoReverseDepth = IdString( "hlms_no_reverse_depth" );
-    const IdString HlmsBaseProp::ReadOnlyIsTex  = IdString( "hlms_readonly_is_tex" );
+    const IdString HlmsBaseProp::ReadOnlyIsTex = IdString( "hlms_readonly_is_tex" );
 
+    // clang-format off
     const IdString HlmsBaseProp::Syntax         = IdString( "syntax" );
     const IdString HlmsBaseProp::Hlsl           = IdString( "hlsl" );
     const IdString HlmsBaseProp::Glsl           = IdString( "glsl" );
-    const IdString HlmsBaseProp::Glsles         = IdString( "glsles" );
     const IdString HlmsBaseProp::Glslvk         = IdString( "glslvk" );
     const IdString HlmsBaseProp::Hlslvk         = IdString( "hlslvk" );
     const IdString HlmsBaseProp::Metal          = IdString( "metal" );
     const IdString HlmsBaseProp::GL3Plus        = IdString( "GL3+" );
-    const IdString HlmsBaseProp::GLES           = IdString( "GLES" );
     const IdString HlmsBaseProp::iOS            = IdString( "iOS" );
     const IdString HlmsBaseProp::macOS          = IdString( "macOS" );
-    const IdString HlmsBaseProp::HighQuality    = IdString( "hlms_high_quality" );
+    const IdString HlmsBaseProp::PrecisionMode  = IdString( "precision_mode" );
+    const IdString HlmsBaseProp::Full32         = IdString( "full32" );
+    const IdString HlmsBaseProp::Midf16         = IdString( "midf16" );
+    const IdString HlmsBaseProp::Relaxed        = IdString( "relaxed" );
     const IdString HlmsBaseProp::FastShaderBuildHack= IdString( "fast_shader_build_hack" );
     const IdString HlmsBaseProp::TexGather      = IdString( "hlms_tex_gather" );
     const IdString HlmsBaseProp::DisableStage   = IdString( "hlms_disable_stage" );
+    // clang-format on
 
     const IdString HlmsBasePieces::AlphaTestCmpFunc = IdString( "alpha_test_cmp_func" );
 
-    //GL extensions
+    // GL extensions
     const IdString HlmsBaseProp::GlAmdTrinaryMinMax = IdString( "hlms_amd_trinary_minmax" );
 
-    const IdString *HlmsBaseProp::UvCountPtrs[8] =
-    {
-        &HlmsBaseProp::UvCount0,
-        &HlmsBaseProp::UvCount1,
-        &HlmsBaseProp::UvCount2,
-        &HlmsBaseProp::UvCount3,
-        &HlmsBaseProp::UvCount4,
-        &HlmsBaseProp::UvCount5,
-        &HlmsBaseProp::UvCount6,
+    const IdString *HlmsBaseProp::UvCountPtrs[8] = {  //
+        &HlmsBaseProp::UvCount0,                      //
+        &HlmsBaseProp::UvCount1,                      //
+        &HlmsBaseProp::UvCount2,                      //
+        &HlmsBaseProp::UvCount3,                      //
+        &HlmsBaseProp::UvCount4,                      //
+        &HlmsBaseProp::UvCount5,                      //
+        &HlmsBaseProp::UvCount6,                      //
         &HlmsBaseProp::UvCount7
     };
 
-    const IdString HlmsPsoProp::Macroblock      = IdString( "PsoMacroblock" );
-    const IdString HlmsPsoProp::Blendblock      = IdString( "PsoBlendblock" );
-    const IdString HlmsPsoProp::InputLayoutId   = IdString( "InputLayoutId" );
+    const IdString HlmsPsoProp::Macroblock = IdString( "PsoMacroblock" );
+    const IdString HlmsPsoProp::Blendblock = IdString( "PsoBlendblock" );
+    const IdString HlmsPsoProp::InputLayoutId = IdString( "InputLayoutId" );
+    const IdString HlmsPsoProp::StrongMacroblockBits = IdString( "StrongMacroblockBits" );
+    const IdString HlmsPsoProp::StrongBlendblockBits = IdString( "StrongBlendblockBits" );
 
     const String ShaderFiles[] = { "VertexShader_vs", "PixelShader_ps", "GeometryShader_gs",
                                    "HullShader_hs", "DomainShader_ds" };
     const String PieceFilePatterns[] = { "piece_vs", "piece_ps", "piece_gs", "piece_hs", "piece_ds" };
 
-    //Must be sorted from best to worst
-    const String BestD3DShaderTargets[NumShaderTypes][5] =
-    {
-        {
-            "vs_5_0", "vs_4_1", "vs_4_0",
-            "vs_4_0_level_9_3", "vs_4_0_level_9_1"
-        },
-        {
-            "ps_5_0", "ps_4_1", "ps_4_0",
-            "ps_4_0_level_9_3", "ps_4_0_level_9_1"
-        },
-        {
-            "gs_5_0", "gs_4_1", "gs_4_0", "placeholder", "placeholder"
-        },
-        {
-            "hs_5_0", "hs_4_1", "hs_4_0", "placeholder", "placeholder"
-        },
-        {
-            "ds_5_0", "ds_4_1", "ds_4_0", "placeholder", "placeholder"
-        },
+    // Must be sorted from best to worst
+    const String BestD3DShaderTargets[NumShaderTypes][5] = {
+        { "vs_5_0", "vs_4_1", "vs_4_0", "vs_4_0_level_9_3", "vs_4_0_level_9_1" },
+        { "ps_5_0", "ps_4_1", "ps_4_0", "ps_4_0_level_9_3", "ps_4_0_level_9_1" },
+        { "gs_5_0", "gs_4_1", "gs_4_0", "placeholder", "placeholder" },
+        { "hs_5_0", "hs_4_1", "hs_4_0", "placeholder", "placeholder" },
+        { "ds_5_0", "ds_4_1", "ds_4_0", "placeholder", "placeholder" },
     };
 
     static HlmsListener c_defaultListener;
+
+#ifdef OGRE_SHADER_THREADING_BACKWARDS_COMPATIBLE_API
+#    ifdef OGRE_SHADER_THREADING_USE_TLS
+    thread_local uint32 Hlms::msThreadId = 0u;
+#    endif
+#endif
+
+    LightweightMutex Hlms::msGlobalMutex;
+    bool Hlms::msHasParticleFX2Plugin = false;
 
     Hlms::Hlms( HlmsTypes type, const String &typeName, Archive *dataFolder,
                 ArchiveVec *libraryFolders ) :
         mDataFolder( dataFolder ),
         mHlmsManager( 0 ),
+        mShadersGenerated( 0u ),
         mLightGatheringMode( LightGatherForward ),
+        mStaticBranchingLights( false ),
+        mShaderCodeCacheDirty( false ),
+        mParticleSystemConstSlot( 0u ),
+        mParticleSystemSlot( 0u ),
         mNumLightsLimit( 0u ),
         mNumAreaApproxLightsLimit( 1u ),
         mNumAreaLtcLightsLimit( 1u ),
@@ -278,31 +313,33 @@ namespace Ogre
         mShaderProfile( "unset!" ),
         mShaderSyntax( "unset!" ),
         mShaderFileExt( "unset!" ),
-    #if OGRE_DEBUG_MODE >= OGRE_DEBUG_MEDIUM
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_MEDIUM
         mDebugOutput( true ),
-    #else
+#else
         mDebugOutput( false ),
-    #endif
-    #if OGRE_DEBUG_MODE >= OGRE_DEBUG_HIGH
-        mDebugOutputProperties( true ),
-    #else
+#endif
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_HIGH
         mDebugOutputProperties( false ),
-    #endif
-        mHighQuality( false ),
+#else
+        mDebugOutputProperties( false ),
+#endif
+        mPrecisionMode( PrecisionFull32 ),
         mFastShaderBuildHack( false ),
         mDefaultDatablock( 0 ),
         mType( type ),
         mTypeName( typeName ),
         mTypeNameStr( typeName )
     {
-        memset( mShaderTargets, 0, sizeof(mShaderTargets) );
+        memset( mShaderTargets, 0, sizeof( mShaderTargets ) );
+
+        _setNumThreads( 1u );
 
         if( libraryFolders )
         {
             ArchiveVec::const_iterator itor = libraryFolders->begin();
-            ArchiveVec::const_iterator end  = libraryFolders->end();
+            ArchiveVec::const_iterator endt = libraryFolders->end();
 
-            while( itor != end )
+            while( itor != endt )
             {
                 Library library;
                 library.dataFolder = *itor;
@@ -315,9 +352,12 @@ namespace Ogre
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE || OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
         mOutputPath = macCachePath() + '/';
-#endif
-#if OGRE_PLATFORM == OGRE_PLATFORM_WINRT
-        mOutputPath = fileSystemPathToString(Windows::Storage::ApplicationData::Current->TemporaryFolder->Path->Data());
+#elif OGRE_PLATFORM == OGRE_PLATFORM_WINRT && defined( __cplusplus_winrt )
+        mOutputPath = fileSystemPathToString(
+            Windows::Storage::ApplicationData::Current->TemporaryFolder->Path->Data() );
+#elif OGRE_PLATFORM == OGRE_PLATFORM_WINRT && !defined( __cplusplus_winrt )
+        mOutputPath = fileSystemPathToString(
+            winrt::Windows::Storage::ApplicationData::Current().TemporaryFolder().Path().c_str() );
 #endif
     }
     //-----------------------------------------------------------------------------------
@@ -337,28 +377,28 @@ namespace Ogre
     static void hashFileConcatenate( DataStreamPtr &inFile, FastArray<uint8> &fileContents )
     {
         const size_t fileSize = inFile->size();
-        fileContents.resize( fileSize + sizeof(uint64) * 2u );
+        fileContents.resize( fileSize + sizeof( uint64 ) * 2u );
 
         uint64 hashResult[2];
-        memset( hashResult, 0, sizeof(hashResult) );
-        inFile->read( fileContents.begin() + sizeof(uint64) * 2u, fileSize );
-        OGRE_HASH128_FUNC( fileContents.begin(), fileContents.size(), IdString::Seed, hashResult );
-        memcpy( fileContents.begin(), hashResult, sizeof(uint64) * 2u );
+        memset( hashResult, 0, sizeof( hashResult ) );
+        inFile->read( fileContents.begin() + sizeof( uint64 ) * 2u, fileSize );
+        OGRE_HASH128_FUNC( fileContents.begin(), static_cast<int>( fileContents.size() ), IdString::Seed,
+                           hashResult );
+        memcpy( fileContents.begin(), hashResult, sizeof( uint64 ) * 2u );
     }
     //-----------------------------------------------------------------------------------
     void Hlms::hashPieceFiles( Archive *archive, const StringVector &pieceFiles,
                                FastArray<uint8> &fileContents ) const
     {
         StringVector::const_iterator itor = pieceFiles.begin();
-        StringVector::const_iterator end  = pieceFiles.end();
+        StringVector::const_iterator endt = pieceFiles.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
-            //Only open piece files with current render system extension
+            // Only open piece files with current render system extension
             const String::size_type extPos0 = itor->find( mShaderFileExt );
             const String::size_type extPos1 = itor->find( ".any" );
-            if( extPos0 == itor->size() - mShaderFileExt.size() ||
-                extPos1 == itor->size() - 4u )
+            if( extPos0 == itor->size() - mShaderFileExt.size() || extPos1 == itor->size() - 4u )
             {
                 DataStreamPtr inFile = archive->open( *itor );
                 hashFileConcatenate( inFile, fileContents );
@@ -368,82 +408,56 @@ namespace Ogre
         }
     }
     //-----------------------------------------------------------------------------------
+    void Hlms::DatablockCustomPieceFile::getCodeChecksum( uint64 outHash[2] ) const
+    {
+        memset( outHash, 0, sizeof( uint64 ) * 2u );
+        OGRE_HASH128_FUNC( sourceCode.data(), static_cast<int>( sourceCode.size() ), IdString::Seed,
+                           outHash );
+    }
+    //-----------------------------------------------------------------------------------
     void Hlms::getTemplateChecksum( uint64 outHash[2] ) const
     {
         FastArray<uint8> fileContents;
-        fileContents.resize( sizeof(uint64) * 2u, 0 );
+        fileContents.resize( sizeof( uint64 ) * 2u, 0 );
 
-        for( size_t i=0; i<NumShaderTypes; ++i )
+        for( size_t i = 0; i < NumShaderTypes; ++i )
         {
             const String filename = ShaderFiles[i] + mShaderFileExt;
             if( mDataFolder->exists( filename ) )
             {
-                //Library piece files first
+                // Library piece files first
                 LibraryVec::const_iterator itor = mLibrary.begin();
-                LibraryVec::const_iterator end  = mLibrary.end();
+                LibraryVec::const_iterator endt = mLibrary.end();
 
-                while( itor != end )
+                while( itor != endt )
                 {
                     hashPieceFiles( itor->dataFolder, itor->pieceFiles[i], fileContents );
                     ++itor;
                 }
 
-                //Main piece files
+                // Main piece files
                 hashPieceFiles( mDataFolder, mPieceFiles[i], fileContents );
 
-                //The shader file
+                // The shader file
                 DataStreamPtr inFile = mDataFolder->open( filename );
                 hashFileConcatenate( inFile, fileContents );
             }
         }
 
-        memcpy( outHash, fileContents.begin(), sizeof(uint64) * 2u );
-    }
-    //-----------------------------------------------------------------------------------
-    void Hlms::setCommonProperties()
-    {
-        uint16 numWorldTransforms = 2;
-        //bool castShadows          = true;
-
-        setProperty( HlmsBaseProp::Skeleton, numWorldTransforms > 1 );
-        setProperty( HlmsBaseProp::UvCount, 2 );
-        setProperty( "true", 1 );
-        setProperty( "false", 0 );
-
-        setProperty( HlmsBaseProp::DualParaboloidMapping, 0 );
-
-        setProperty( HlmsBaseProp::Normal, 1 );
-
-        setProperty( HlmsBaseProp::UvCount0, 2 );
-        setProperty( HlmsBaseProp::UvCount1, 4 );
-        setProperty( HlmsBaseProp::BonesPerVertex, 4 );
-
-        setProperty( HlmsBaseProp::PssmSplits, 3 );
-        setProperty( HlmsBaseProp::PssmBlend, 1 );
-        setProperty( HlmsBaseProp::PssmFade, 1 );
-        setProperty( HlmsBaseProp::ShadowCaster, 0 );
-
-        setProperty( HlmsBaseProp::LightsDirectional, 1 );
-        setProperty( HlmsBaseProp::LightsDirNonCaster, 1 );
-        setProperty( HlmsBaseProp::LightsPoint, 2 );
-        setProperty( HlmsBaseProp::LightsSpot, 3 );
-
-        setProperty( HlmsBaseProp::Pose, 0 );
-        setProperty( HlmsBaseProp::PoseHalfPrecision, 0 );
-        setProperty( HlmsBaseProp::PoseNormals, 0 );
+        memcpy( outHash, fileContents.begin(), sizeof( uint64 ) * 2u );
     }
     //-----------------------------------------------------------------------------------
     void Hlms::enumeratePieceFiles()
     {
         if( !mDataFolder )
-            return; //Some Hlms implementations may not use template files at all
+            return;  // Some Hlms implementations may not use template files at all
 
         bool hasValidFile = false;
 
-        //Check this folder can at least generate one valid type of shader.
-        for( size_t i=0; i<NumShaderTypes; ++i )
+        // Check this folder can at least generate one valid type of shader.
+        for( size_t i = 0; i < NumShaderTypes; ++i )
         {
-             //Probe both types since this may be called before we know what RS to use.
+            // Probe both types since this may be called before we know what RS to use.
             const String filename = ShaderFiles[i];
             hasValidFile |= mDataFolder->exists( filename + ".glsl" );
             hasValidFile |= mDataFolder->exists( filename + ".hlsl" );
@@ -456,25 +470,26 @@ namespace Ogre
             OGRE_EXCEPT( Exception::ERR_FILE_NOT_FOUND,
                          "Data folder provided contains no valid template shader files. "
                          "Did you provide the right folder location? Check you have the "
-                         "right read pemissions. Folder: " + mDataFolder->getName(),
+                         "right read pemissions. Folder: " +
+                             mDataFolder->getName(),
                          "Hlms::Hlms" );
         }
 
         enumeratePieceFiles( mDataFolder, mPieceFiles );
 
         LibraryVec::iterator itor = mLibrary.begin();
-        LibraryVec::iterator end  = mLibrary.end();
+        LibraryVec::iterator endt = mLibrary.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
             bool foundPieceFiles = enumeratePieceFiles( itor->dataFolder, itor->pieceFiles );
 
             if( !foundPieceFiles )
             {
-                LogManager::getSingleton().logMessage(
-                            "HLMS Library path '" + itor->dataFolder->getName() +
-                            "' has no piece files. Are you sure you provided "
-                            "the right path with read access?" );
+                LogManager::getSingleton().logMessage( "HLMS Library path '" +
+                                                       itor->dataFolder->getName() +
+                                                       "' has no piece files. Are you sure you provided "
+                                                       "the right path with read access?" );
             }
 
             ++itor;
@@ -490,21 +505,21 @@ namespace Ogre
 
         {
             StringVector::iterator itor = stringVectorLowerCase.begin();
-            StringVector::iterator end  = stringVectorLowerCase.end();
-            while( itor != end )
+            StringVector::iterator endt = stringVectorLowerCase.end();
+            while( itor != endt )
             {
                 std::transform( itor->begin(), itor->end(), itor->begin(), ::tolower );
                 ++itor;
             }
         }
 
-        for( size_t i=0; i<NumShaderTypes; ++i )
+        for( size_t i = 0; i < NumShaderTypes; ++i )
         {
             StringVector::const_iterator itLowerCase = stringVectorLowerCase.begin();
             StringVector::const_iterator itor = stringVectorPtr->begin();
-            StringVector::const_iterator end  = stringVectorPtr->end();
+            StringVector::const_iterator endt = stringVectorPtr->end();
 
-            while( itor != end )
+            while( itor != endt )
             {
                 if( itLowerCase->find( PieceFilePatterns[i] ) != String::npos ||
                     itLowerCase->find( "piece_all" ) != String::npos )
@@ -517,50 +532,49 @@ namespace Ogre
                 ++itor;
             }
 
-            //Enumeration order depends on OS and filesystem. Ensure deterministic alphabetical order.
+            // Enumeration order depends on OS and filesystem. Ensure deterministic alphabetical order.
             std::sort( pieceFiles[i].begin(), pieceFiles[i].end() );
         }
 
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::setProperty( IdString key, int32 value )
+    void Hlms::setProperty( size_t tid, IdString key, int32 value )
     {
         HlmsProperty p( key, value );
-        HlmsPropertyVec::iterator it = std::lower_bound( mSetProperties.begin(), mSetProperties.end(),
-                                                         p, OrderPropertyByIdString );
-        if( it == mSetProperties.end() || it->keyName != p.keyName )
-            mSetProperties.insert( it, p );
+        HlmsPropertyVec::iterator it = std::lower_bound(
+            mT[tid].setProperties.begin(), mT[tid].setProperties.end(), p, OrderPropertyByIdString );
+        if( it == mT[tid].setProperties.end() || it->keyName != p.keyName )
+            mT[tid].setProperties.insert( it, p );
         else
             *it = p;
     }
     //-----------------------------------------------------------------------------------
-    int32 Hlms::getProperty( IdString key, int32 defaultVal ) const
+    int32 Hlms::getProperty( size_t tid, IdString key, int32 defaultVal ) const
     {
         HlmsProperty p( key, 0 );
-        HlmsPropertyVec::const_iterator it = std::lower_bound( mSetProperties.begin(),
-                                                               mSetProperties.end(),
-                                                               p, OrderPropertyByIdString );
-        if( it != mSetProperties.end() && it->keyName == p.keyName )
+        HlmsPropertyVec::const_iterator it = std::lower_bound(
+            mT[tid].setProperties.begin(), mT[tid].setProperties.end(), p, OrderPropertyByIdString );
+        if( it != mT[tid].setProperties.end() && it->keyName == p.keyName )
             defaultVal = it->value;
 
         return defaultVal;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::unsetProperty( IdString key )
+    void Hlms::unsetProperty( size_t tid, IdString key )
     {
         HlmsProperty p( key, 0 );
-        HlmsPropertyVec::iterator it = std::lower_bound( mSetProperties.begin(), mSetProperties.end(),
-                                                         p, OrderPropertyByIdString );
-        if( it != mSetProperties.end() && it->keyName == p.keyName )
-            mSetProperties.erase( it );
+        HlmsPropertyVec::iterator it = std::lower_bound(
+            mT[tid].setProperties.begin(), mT[tid].setProperties.end(), p, OrderPropertyByIdString );
+        if( it != mT[tid].setProperties.end() && it->keyName == p.keyName )
+            mT[tid].setProperties.erase( it );
     }
     //-----------------------------------------------------------------------------------
     void Hlms::setProperty( HlmsPropertyVec &properties, IdString key, int32 value )
     {
         HlmsProperty p( key, value );
-        HlmsPropertyVec::iterator it = std::lower_bound( properties.begin(), properties.end(),
-                                                         p, OrderPropertyByIdString );
+        HlmsPropertyVec::iterator it =
+            std::lower_bound( properties.begin(), properties.end(), p, OrderPropertyByIdString );
         if( it == properties.end() || it->keyName != p.keyName )
             properties.insert( it, p );
         else
@@ -570,9 +584,8 @@ namespace Ogre
     int32 Hlms::getProperty( const HlmsPropertyVec &properties, IdString key, int32 defaultVal )
     {
         HlmsProperty p( key, 0 );
-        HlmsPropertyVec::const_iterator it = std::lower_bound( properties.begin(),
-                                                               properties.end(),
-                                                               p, OrderPropertyByIdString );
+        HlmsPropertyVec::const_iterator it =
+            std::lower_bound( properties.begin(), properties.end(), p, OrderPropertyByIdString );
         if( it != properties.end() && it->keyName == p.keyName )
             defaultVal = it->value;
 
@@ -583,13 +596,7 @@ namespace Ogre
     {
         bool isElse = false;
 
-        const char *blockNames[] =
-        {
-            "foreach",
-            "property",
-            "piece",
-            "else"
-        };
+        const char *blockNames[] = { "foreach", "property", "piece", "else" };
 
         cbitset32<2048> allowedElses;
         if( allowsElse )
@@ -623,11 +630,11 @@ namespace Ogre
                         {
                             syntaxError = true;
                             printf( "Unexpected @else while looking for @end\nNear: '%s'\n",
-                                    &(*subString.begin()) );
+                                    &( *subString.begin() ) );
                         }
                         if( nesting == 0 )
                         {
-                            //Decrement nesting so that we're out and tell caller we went from
+                            // Decrement nesting so that we're out and tell caller we went from
                             //@property() through @else. Caller will later have to go from
                             //@else to @end
                             isElse = true;
@@ -635,8 +642,8 @@ namespace Ogre
                         }
                         else
                         {
-                            //Do not decrease 'nesting', as we now need to look for "@end" but
-                            //unset allowedElses, so that we do not allow two consecutive @else
+                            // Do not decrease 'nesting', as we now need to look for "@end" but
+                            // unset allowedElses, so that we do not allow two consecutive @else
                             allowedElses.setValue( static_cast<size_t>( nesting ), 0u );
                         }
                         it += sizeof( "else" ) - 1;
@@ -644,20 +651,21 @@ namespace Ogre
                     }
                     else
                     {
-                        for( size_t i=0; i<sizeof( blockNames ) / sizeof( char* ); ++i )
+                        for( size_t i = 0; i < sizeof( blockNames ) / sizeof( char * ); ++i )
                         {
                             bool startBlock = subString.startWith( blockNames[i] );
                             if( startBlock )
                             {
-                                it = subString.begin() + strlen( blockNames[i] );
+                                it = subString.begin() +
+                                     static_cast<ptrdiff_t>( strlen( blockNames[i] ) );
                                 if( i == 3 )
                                 {
-                                    //Do not increase 'nesting' for "@else"
+                                    // Do not increase 'nesting' for "@else"
                                     if( !allowedElses.test( static_cast<size_t>( nesting ) ) )
                                     {
                                         syntaxError = true;
                                         printf( "Unexpected @else while looking for @end\nNear: '%s'\n",
-                                                &(*subString.begin()) );
+                                                &( *subString.begin() ) );
                                     }
                                 }
                                 else
@@ -679,27 +687,30 @@ namespace Ogre
 
         if( it != en && nesting < 0 )
         {
-            int keywordLength = (isElse ? sizeof( "else" ) : sizeof( "end" )) - 1;
-            outSubString.setEnd( it - outSubString.getOriginalBuffer().begin() - keywordLength );
+            int keywordLength = ( isElse ? sizeof( "else" ) : sizeof( "end" ) ) - 1;
+            outSubString.setEnd(
+                static_cast<size_t>( it - outSubString.getOriginalBuffer().begin() - keywordLength ) );
         }
         else
         {
             syntaxError = true;
 
             char tmpData[64];
-            memset( tmpData, 0, sizeof(tmpData) );
-            strncpy( tmpData, &(*outSubString.begin()),
+            memset( tmpData, 0, sizeof( tmpData ) );
+            strncpy( tmpData, &( *outSubString.begin() ),
                      std::min<size_t>( 63u, outSubString.getSize() ) );
 
-            printf( "Syntax Error at line %lu: start block (e.g. @foreach; @property) "
-                    "without matching @end\nNear: '%s'\n", calculateLineCount( outSubString ),
-                    tmpData );
+            printf(
+                "Syntax Error at line %lu: start block (e.g. @foreach; @property) "
+                "without matching @end\nNear: '%s'\n",
+                calculateLineCount( outSubString ), tmpData );
         }
 
         return isElse;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::evaluateExpression( SubStringRef &outSubString, bool &outSyntaxError ) const
+    bool Hlms::evaluateExpression( SubStringRef &outSubString, bool &outSyntaxError,
+                                   const size_t tid ) const
     {
         size_t expEnd = evaluateExpressionEnd( outSubString );
 
@@ -710,16 +721,16 @@ namespace Ogre
         }
 
         SubStringRef subString( &outSubString.getOriginalBuffer(), outSubString.getStart(),
-                                 outSubString.getStart() + expEnd );
+                                outSubString.getStart() + expEnd );
 
-        outSubString = SubStringRef( &outSubString.getOriginalBuffer(),
-                                     outSubString.getStart() + expEnd + 1 );
+        outSubString =
+            SubStringRef( &outSubString.getOriginalBuffer(), outSubString.getStart() + expEnd + 1 );
 
         bool textStarted = false;
         bool syntaxError = false;
         bool nextExpressionNegates = false;
 
-        std::vector<Expression*> expressionParents;
+        std::vector<Expression *> expressionParents;
         ExpressionVec outExpressions;
         outExpressions.clear();
         outExpressions.resize( 1 );
@@ -762,8 +773,8 @@ namespace Ogre
                 textStarted = false;
             }
             else if( c == '!' &&
-                     //Avoid treating "!=" as a negation of variable.
-                     ( (it + 1) == en || *(it + 1) != '=' ) )
+                     // Avoid treating "!=" as a negation of variable.
+                     ( ( it + 1 ) == en || *( it + 1 ) != '=' ) )
             {
                 nextExpressionNegates = true;
             }
@@ -776,8 +787,7 @@ namespace Ogre
                     currentExpression->children.back().negated = nextExpressionNegates;
                 }
 
-                if( c == '&' || c == '|' ||
-                    c == '=' || c == '<' || c == '>' ||
+                if( c == '&' || c == '|' || c == '=' || c == '<' || c == '>' ||
                     c == '!' /* can only mean "!=" */ )
                 {
                     if( currentExpression->children.empty() || nextExpressionNegates )
@@ -785,8 +795,7 @@ namespace Ogre
                         syntaxError = true;
                     }
                     else if( !currentExpression->children.back().value.empty() &&
-                             c != *(currentExpression->children.back().value.end()-1) &&
-                             c != '=' )
+                             c != *( currentExpression->children.back().value.end() - 1 ) && c != '=' )
                     {
                         currentExpression->children.push_back( Expression() );
                     }
@@ -805,7 +814,7 @@ namespace Ogre
             syntaxError = true;
 
         if( !syntaxError )
-            retVal = evaluateExpressionRecursive( outExpressions, syntaxError ) != 0;
+            retVal = evaluateExpressionRecursive( outExpressions, syntaxError, tid ) != 0;
 
         if( syntaxError )
             printf( "Syntax Error at line %lu\n", calculateLineCount( subString ) );
@@ -815,14 +824,15 @@ namespace Ogre
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    int32 Hlms::evaluateExpressionRecursive( ExpressionVec &expression, bool &outSyntaxError ) const
+    int32 Hlms::evaluateExpressionRecursive( ExpressionVec &expression, bool &outSyntaxError,
+                                             const size_t tid ) const
     {
         bool syntaxError = outSyntaxError;
         bool lastExpWasOperator = true;
         ExpressionVec::iterator itor = expression.begin();
-        ExpressionVec::iterator end  = expression.end();
+        ExpressionVec::iterator endt = expression.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
             Expression &exp = *itor;
 
@@ -847,8 +857,8 @@ namespace Ogre
             else
                 exp.type = EXPR_VAR;
 
-            if( ( exp.isOperator() &&  lastExpWasOperator) ||
-                (!exp.isOperator() && !lastExpWasOperator) )
+            if( ( exp.isOperator() && lastExpWasOperator ) ||
+                ( !exp.isOperator() && !lastExpWasOperator ) )
             {
                 syntaxError = true;
                 printf( "Unrecognized token '%s'", exp.value.c_str() );
@@ -861,40 +871,40 @@ namespace Ogre
             ++itor;
         }
 
-        //If we don't check 'expression.size() > 3u' here, we can end up in infinite recursion
-        //later on (because operators get turned into EXPR_OBJECT and thus the object
-        //is evaluated recusrively, and turned again into EXPR_OBJECT)
+        // If we don't check 'expression.size() > 3u' here, we can end up in infinite recursion
+        // later on (because operators get turned into EXPR_OBJECT and thus the object
+        // is evaluated recusrively, and turned again into EXPR_OBJECT)
         if( !syntaxError && expression.size() > 3u )
         {
-            //We will now enclose "a < b" into "(a < b)" other wise statements like these:
-            //a && b < c will be parsed as (a && b) < c which is completely counterintuitive.
+            // We will now enclose "a < b" into "(a < b)" other wise statements like these:
+            // a && b < c will be parsed as (a && b) < c which is completely counterintuitive.
 
-            //We need expression.size() > 3 which is guaranteed because if back nor front
-            //are neither operators and we can't have two operators in a row, then they can
-            //only be in the middle, or there is no operator at all.
+            // We need expression.size() > 3 which is guaranteed because if back nor front
+            // are neither operators and we can't have two operators in a row, then they can
+            // only be in the middle, or there is no operator at all.
             itor = expression.begin() + 1;
-            end  = expression.end();
-            while( itor != end )
+            endt = expression.end();
+            while( itor != endt )
             {
                 if( itor->type >= EXPR_OPERATOR_LE && itor->type <= EXPR_OPERATOR_GREQ )
                 {
-                    //We need to merge n-1, n, n+1 into:
+                    // We need to merge n-1, n, n+1 into:
                     // (n-1)' = EXPR_OBJECT with 3 children:
                     //      n-1, n, n+1
-                    //and then remove both n & n+1.
+                    // and then remove both n & n+1.
                     itor->children.resize( 3 );
 
                     itor->children[1].type = itor->type;
                     itor->children[1].value.swap( itor->value );
-                    itor->children[0].swap( *(itor - 1) );
-                    itor->children[2].swap( *(itor + 1) );
+                    itor->children[0].swap( *( itor - 1 ) );
+                    itor->children[2].swap( *( itor + 1 ) );
 
                     itor->type = EXPR_OBJECT;
 
-                    (itor - 1)->swap( *itor );
+                    ( itor - 1 )->swap( *itor );
 
                     itor = expression.erase( itor, itor + 2 );
-                    end  = expression.end();
+                    endt = expression.end();
                 }
                 else
                 {
@@ -903,32 +913,32 @@ namespace Ogre
             }
         }
 
-        //Evaluate the individual properties.
+        // Evaluate the individual properties.
         itor = expression.begin();
-        while( itor != end && !syntaxError )
+        while( itor != endt && !syntaxError )
         {
             Expression &exp = *itor;
             if( exp.type == EXPR_VAR )
             {
                 char *endPtr;
-                exp.result = strtol( exp.value.c_str(), &endPtr, 10 );
+                exp.result = static_cast<int32>( strtol( exp.value.c_str(), &endPtr, 10 ) );
                 if( exp.value.c_str() == endPtr )
                 {
-                    //This isn't a number. Let's try if it's a variable
-                    exp.result = getProperty( exp.value );
+                    // This isn't a number. Let's try if it's a variable
+                    exp.result = getProperty( tid, exp.value );
                 }
                 lastExpWasOperator = false;
             }
             else
             {
-                exp.result = evaluateExpressionRecursive( exp.children, syntaxError );
+                exp.result = evaluateExpressionRecursive( exp.children, syntaxError, tid );
                 lastExpWasOperator = false;
             }
 
             ++itor;
         }
 
-        //Perform operations between the different properties.
+        // Perform operations between the different properties.
         int32 retVal = 1;
         if( !syntaxError )
         {
@@ -936,20 +946,36 @@ namespace Ogre
 
             ExpressionType nextOperation = EXPR_VAR;
 
-            while( itor != end )
+            while( itor != endt )
             {
                 int32 result = itor->negated ? !itor->result : itor->result;
 
                 switch( nextOperation )
                 {
-                case EXPR_OPERATOR_OR:      retVal = (retVal != 0) | (result != 0); break;
-                case EXPR_OPERATOR_AND:     retVal = (retVal != 0) & (result != 0); break;
-                case EXPR_OPERATOR_LE:      retVal =  retVal <  result; break;
-                case EXPR_OPERATOR_LEEQ:    retVal =  retVal <= result; break;
-                case EXPR_OPERATOR_EQ:      retVal =  retVal == result; break;
-                case EXPR_OPERATOR_NEQ:     retVal =  retVal != result; break;
-                case EXPR_OPERATOR_GR:      retVal =  retVal >  result; break;
-                case EXPR_OPERATOR_GREQ:    retVal =  retVal >= result; break;
+                case EXPR_OPERATOR_OR:
+                    retVal = ( retVal != 0 ) | ( result != 0 );
+                    break;
+                case EXPR_OPERATOR_AND:
+                    retVal = ( retVal != 0 ) & ( result != 0 );
+                    break;
+                case EXPR_OPERATOR_LE:
+                    retVal = retVal < result;
+                    break;
+                case EXPR_OPERATOR_LEEQ:
+                    retVal = retVal <= result;
+                    break;
+                case EXPR_OPERATOR_EQ:
+                    retVal = retVal == result;
+                    break;
+                case EXPR_OPERATOR_NEQ:
+                    retVal = retVal != result;
+                    break;
+                case EXPR_OPERATOR_GR:
+                    retVal = retVal > result;
+                    break;
+                case EXPR_OPERATOR_GREQ:
+                    retVal = retVal >= result;
+                    break;
 
                 case EXPR_OBJECT:
                 case EXPR_VAR:
@@ -990,7 +1016,7 @@ namespace Ogre
         size_t retVal = String::npos;
         if( it != en && nesting < 0 )
         {
-            retVal = it - outSubString.begin() - 1;
+            retVal = static_cast<size_t>( it - outSubString.begin() - 1u );
         }
         else
         {
@@ -1013,16 +1039,16 @@ namespace Ogre
         }
 
         SubStringRef subString( &outSubString.getOriginalBuffer(), outSubString.getStart(),
-                                 outSubString.getStart() + expEnd );
+                                outSubString.getStart() + expEnd );
 
-        outSubString = SubStringRef( &outSubString.getOriginalBuffer(),
-                                     outSubString.getStart() + expEnd + 1 );
+        outSubString =
+            SubStringRef( &outSubString.getOriginalBuffer(), outSubString.getStart() + expEnd + 1 );
 
         int expressionState = 0;
         bool syntaxError = false;
 
         outArgs.clear();
-        outArgs.push_back( String() );
+        outArgs.emplace_back();
 
         String::const_iterator it = subString.begin();
         String::const_iterator en = subString.end();
@@ -1043,7 +1069,7 @@ namespace Ogre
             else if( c == ',' )
             {
                 expressionState = 0;
-                outArgs.push_back( String() );
+                outArgs.emplace_back();
             }
             else
             {
@@ -1071,16 +1097,16 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     void Hlms::copy( String &outBuffer, const SubStringRef &inSubString, size_t length )
     {
-        outBuffer.append( inSubString.begin(), inSubString.begin() + length );
+        outBuffer.append( inSubString.begin(), inSubString.begin() + static_cast<ptrdiff_t>( length ) );
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::repeat( String &outBuffer, const SubStringRef &inSubString, size_t length,
-                       size_t passNum, const String &counterVar )
+    void Hlms::repeat( String &outBuffer, const SubStringRef &inSubString, size_t length, size_t passNum,
+                       const String &counterVar )
     {
         String::const_iterator itor = inSubString.begin();
-        String::const_iterator end  = inSubString.begin() + length;
+        String::const_iterator endt = inSubString.begin() + static_cast<ptrdiff_t>( length );
 
-        while( itor != end )
+        while( itor != endt )
         {
             if( *itor == '@' && !counterVar.empty() )
             {
@@ -1088,9 +1114,9 @@ namespace Ogre
                 if( subString.startWith( counterVar ) )
                 {
                     char tmp[16];
-                    sprintf( tmp, "%lu", (unsigned long)passNum );
+                    std::snprintf( tmp, sizeof( tmp ), "%lu", (unsigned long)passNum );
                     outBuffer += tmp;
-                    itor += counterVar.size() + 1;
+                    itor += static_cast<ptrdiff_t>( counterVar.size() + 1u );
                 }
                 else
                 {
@@ -1099,54 +1125,53 @@ namespace Ogre
             }
             else
             {
-               outBuffer.push_back( *itor++ );
+                outBuffer.push_back( *itor++ );
             }
         }
     }
     //-----------------------------------------------------------------------------------
-        int setOp( int op1, int op2 ) { return op2; }
-        int addOp( int op1, int op2 ) { return op1 + op2; }
-        int subOp( int op1, int op2 ) { return op1 - op2; }
-        int mulOp( int op1, int op2 ) { return op1 * op2; }
-        int divOp( int op1, int op2 ) { return op1 / op2; }
-        int modOp( int op1, int op2 ) { return op1 % op2; }
-        int minOp( int op1, int op2 ) { return std::min( op1, op2 ); }
-        int maxOp( int op1, int op2 ) { return std::max( op1, op2 ); }
+    int setOp( int /*op1*/, int op2 ) { return op2; }
+    int addOp( int op1, int op2 ) { return op1 + op2; }
+    int subOp( int op1, int op2 ) { return op1 - op2; }
+    int mulOp( int op1, int op2 ) { return op1 * op2; }
+    int divOp( int op1, int op2 ) { return op1 / op2; }
+    int modOp( int op1, int op2 ) { return op1 % op2; }
+    int minOp( int op1, int op2 ) { return std::min( op1, op2 ); }
+    int maxOp( int op1, int op2 ) { return std::max( op1, op2 ); }
 
-        struct Operation
+    struct Operation
+    {
+        const char *opName;
+        size_t length;
+        int ( *opFunc )( int, int );
+        Operation( const char *_name, size_t len, int ( *_opFunc )( int, int ) ) :
+            opName( _name ),
+            length( len ),
+            opFunc( _opFunc )
         {
-            const char *opName;
-            size_t length;
-            int (*opFunc)(int, int);
-            Operation( const char *_name, size_t len, int (*_opFunc)(int, int) ) :
-                opName( _name ), length( len ), opFunc( _opFunc ) {}
-        };
+        }
+    };
 
-        const Operation c_operations[8] =
-        {
-            Operation( "pset", sizeof( "@pset" ), &setOp ),
-            Operation( "padd", sizeof( "@padd" ), &addOp ),
-            Operation( "psub", sizeof( "@psub" ), &subOp ),
-            Operation( "pmul", sizeof( "@pmul" ), &mulOp ),
-            Operation( "pdiv", sizeof( "@pdiv" ), &divOp ),
-            Operation( "pmod", sizeof( "@pmod" ), &modOp ),
-            Operation( "pmin", sizeof( "@pmin" ), &minOp ),
-            Operation( "pmax", sizeof( "@pmax" ), &maxOp )
-        };
+    const Operation c_operations[8] = {
+        Operation( "pset", sizeof( "@pset" ), &setOp ), Operation( "padd", sizeof( "@padd" ), &addOp ),
+        Operation( "psub", sizeof( "@psub" ), &subOp ), Operation( "pmul", sizeof( "@pmul" ), &mulOp ),
+        Operation( "pdiv", sizeof( "@pdiv" ), &divOp ), Operation( "pmod", sizeof( "@pmod" ), &modOp ),
+        Operation( "pmin", sizeof( "@pmin" ), &minOp ), Operation( "pmax", sizeof( "@pmax" ), &maxOp )
+    };
     //-----------------------------------------------------------------------------------
-    inline int Hlms::interpretAsNumberThenAsProperty( const String &argValue ) const
+    inline int Hlms::interpretAsNumberThenAsProperty( const String &argValue, const size_t tid ) const
     {
         int opValue = StringConverter::parseInt( argValue, -std::numeric_limits<int>::max() );
         if( opValue == -std::numeric_limits<int>::max() )
         {
-            //Not a number, interpret as property
-            opValue = getProperty( argValue );
+            // Not a number, interpret as property
+            opValue = getProperty( tid, argValue );
         }
 
         return opValue;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::parseMath( const String &inBuffer, String &outBuffer )
+    bool Hlms::parseMath( const String &inBuffer, String &outBuffer, const size_t tid )
     {
         outBuffer.clear();
         outBuffer.reserve( inBuffer.size() );
@@ -1156,22 +1181,22 @@ namespace Ogre
 
         size_t pos;
         pos = subString.find( "@" );
-        size_t keyword = ~0;
+        size_t keyword = std::numeric_limits<size_t>::max();
 
-        while( pos != String::npos && keyword == (size_t)~0 )
+        while( pos != String::npos && keyword == std::numeric_limits<size_t>::max() )
         {
             size_t maxSize = subString.findFirstOf( " \t(", pos + 1 );
             maxSize = maxSize == String::npos ? subString.getSize() : maxSize;
             SubStringRef keywordStr( &inBuffer, subString.getStart() + pos + 1,
-                                                subString.getStart() + maxSize );
+                                     subString.getStart() + maxSize );
 
-            for( size_t i=0; i<8 && keyword == (size_t)~0; ++i )
+            for( size_t i = 0; i < 8 && keyword == std::numeric_limits<size_t>::max(); ++i )
             {
                 if( keywordStr.matchEqual( c_operations[i].opName ) )
                     keyword = i;
             }
 
-            if( keyword == (size_t)~0 )
+            if( keyword == std::numeric_limits<size_t>::max() )
                 pos = subString.find( "@", pos + 1 );
         }
 
@@ -1179,7 +1204,7 @@ namespace Ogre
 
         while( pos != String::npos && !syntaxError )
         {
-            //Copy what comes before the block
+            // Copy what comes before the block
             copy( outBuffer, subString, pos );
 
             subString.setStart( subString.getStart() + pos + c_operations[keyword].length );
@@ -1191,44 +1216,44 @@ namespace Ogre
             {
                 const IdString dstProperty = argValues[0];
                 const size_t idx = argValues.size() == 3 ? 1 : 0;
-                const int op1Value = interpretAsNumberThenAsProperty( argValues[idx] );
-                const int op2Value = interpretAsNumberThenAsProperty( argValues[idx + 1] );
+                const int op1Value = interpretAsNumberThenAsProperty( argValues[idx], tid );
+                const int op2Value = interpretAsNumberThenAsProperty( argValues[idx + 1], tid );
 
                 int result = c_operations[keyword].opFunc( op1Value, op2Value );
-                setProperty( dstProperty, result );
+                setProperty( tid, dstProperty, result );
             }
             else
             {
                 unsigned long lineCount = calculateLineCount( subString );
                 if( keyword <= 1 )
                 {
-                    printf( "Syntax Error at line %lu: @%s expects one parameter\n",
-                            lineCount, c_operations[keyword].opName );
+                    printf( "Syntax Error at line %lu: @%s expects one parameter\n", lineCount,
+                            c_operations[keyword].opName );
                 }
                 else
                 {
-                    printf( "Syntax Error at line %lu: @%s expects two or three parameters\n",
-                            lineCount, c_operations[keyword].opName );
+                    printf( "Syntax Error at line %lu: @%s expects two or three parameters\n", lineCount,
+                            c_operations[keyword].opName );
                 }
             }
 
             pos = subString.find( "@" );
-            keyword = ~0;
+            keyword = std::numeric_limits<size_t>::max();
 
-            while( pos != String::npos && keyword == (size_t)~0 )
+            while( pos != String::npos && keyword == std::numeric_limits<size_t>::max() )
             {
                 size_t maxSize = subString.findFirstOf( " \t(", pos + 1 );
                 maxSize = maxSize == String::npos ? subString.getSize() : maxSize;
                 SubStringRef keywordStr( &inBuffer, subString.getStart() + pos + 1,
-                                                    subString.getStart() + maxSize );
+                                         subString.getStart() + maxSize );
 
-                for( size_t i=0; i<8 && keyword == (size_t)~0; ++i )
+                for( size_t i = 0; i < 8 && keyword == std::numeric_limits<size_t>::max(); ++i )
                 {
                     if( keywordStr.matchEqual( c_operations[i].opName ) )
                         keyword = i;
                 }
 
-                if( keyword == (size_t)~0 )
+                if( keyword == std::numeric_limits<size_t>::max() )
                     pos = subString.find( "@", pos + 1 );
             }
         }
@@ -1238,7 +1263,7 @@ namespace Ogre
         return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::parseForEach( const String &inBuffer, String &outBuffer ) const
+    bool Hlms::parseForEach( const String &inBuffer, String &outBuffer, const size_t tid ) const
     {
         outBuffer.clear();
         outBuffer.reserve( inBuffer.size() );
@@ -1251,7 +1276,7 @@ namespace Ogre
 
         while( pos != String::npos && !syntaxError )
         {
-            //Copy what comes before the block
+            // Copy what comes before the block
             copy( outBuffer, subString, pos );
 
             subString.setStart( subString.getStart() + pos + sizeof( "@foreach" ) );
@@ -1263,12 +1288,12 @@ namespace Ogre
             if( !syntaxError )
             {
                 char *endPtr;
-                int count = strtol( argValues[0].c_str(), &endPtr, 10 );
+                int32 count = static_cast<int32>( strtol( argValues[0].c_str(), &endPtr, 10 ) );
                 if( argValues[0].c_str() == endPtr )
                 {
-                    //This isn't a number. Let's try if it's a variable
-                    //count = getProperty( argValues[0], -1 );
-					count = getProperty( argValues[0], 0 );
+                    // This isn't a number. Let's try if it's a variable
+                    // count = getProperty( argValues[0], -1 );
+                    count = getProperty( tid, argValues[0], 0 );
                 }
 
                 /*if( count < 0 )
@@ -1284,30 +1309,33 @@ namespace Ogre
                 if( argValues.size() > 1 )
                     counterVar = argValues[1];
 
-                int start = 0;
+                int32 start = 0;
                 if( argValues.size() > 2 )
                 {
-                    start = strtol( argValues[2].c_str(), &endPtr, 10 );
+                    start = static_cast<int32>( strtol( argValues[2].c_str(), &endPtr, 10 ) );
                     if( argValues[2].c_str() == endPtr )
                     {
-                        //This isn't a number. Let's try if it's a variable
-                        start = getProperty( argValues[2], -1 );
+                        // This isn't a number. Let's try if it's a variable
+                        start = static_cast<int32>( getProperty( tid, argValues[2], -1 ) );
                     }
 
                     if( start < 0 )
                     {
-                        printf( "Invalid parameter at line %lu (@foreach)."
-                                " '%s' is not a number nor a variable\n",
-                                calculateLineCount( blockSubString ), argValues[2].c_str() );
+                        printf(
+                            "Invalid parameter at line %lu (@foreach)."
+                            " '%s' is not a number nor a variable\n",
+                            calculateLineCount( blockSubString ), argValues[2].c_str() );
                         syntaxError = true;
                         start = 0;
                         count = 0;
                     }
                 }
 
-                for( int i=start; i<count; ++i )
-                    repeat( outBuffer, blockSubString, blockSubString.getSize(), i, counterVar );
-
+                for( int32 i = start; i < count; ++i )
+                {
+                    repeat( outBuffer, blockSubString, blockSubString.getSize(),
+                            static_cast<size_t>( i ), counterVar );
+                }
             }
 
             subString.setStart( blockSubString.getEnd() + sizeof( "@end" ) );
@@ -1319,7 +1347,7 @@ namespace Ogre
         return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::parseProperties( String &inBuffer, String &outBuffer ) const
+    bool Hlms::parseProperties( String &inBuffer, String &outBuffer, const size_t tid ) const
     {
         outBuffer.clear();
         outBuffer.reserve( inBuffer.size() );
@@ -1331,11 +1359,11 @@ namespace Ogre
 
         while( pos != String::npos && !syntaxError )
         {
-            //Copy what comes before the block
+            // Copy what comes before the block
             copy( outBuffer, subString, pos );
 
             subString.setStart( subString.getStart() + pos + sizeof( "@property" ) );
-            bool result = evaluateExpression( subString, syntaxError );
+            bool result = evaluateExpression( subString, syntaxError, tid );
 
             SubStringRef blockSubString = subString;
             bool isElse = findBlockEnd( blockSubString, syntaxError, true );
@@ -1365,13 +1393,13 @@ namespace Ogre
         while( !syntaxError && outBuffer.find( "@property" ) != String::npos )
         {
             inBuffer.swap( outBuffer );
-            syntaxError = parseProperties( inBuffer, outBuffer );
+            syntaxError = parseProperties( inBuffer, outBuffer, tid );
         }
 
         return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::parseUndefPieces( String &inBuffer, String &outBuffer )
+    bool Hlms::parseUndefPieces( String &inBuffer, String &outBuffer, const size_t tid )
     {
         outBuffer.clear();
         outBuffer.reserve( inBuffer.size() );
@@ -1384,7 +1412,7 @@ namespace Ogre
 
         while( pos != String::npos && !syntaxError )
         {
-            //Copy what comes before the block
+            // Copy what comes before the block
             copy( outBuffer, subString, pos );
 
             subString.setStart( subString.getStart() + pos + sizeof( "@undefpiece" ) );
@@ -1395,9 +1423,9 @@ namespace Ogre
             if( !syntaxError )
             {
                 const IdString pieceName( argValues[0] );
-                PiecesMap::iterator it = mPieces.find( pieceName );
-                if( it != mPieces.end() )
-                    mPieces.erase( it );
+                PiecesMap::iterator it = mT[tid].pieces.find( pieceName );
+                if( it != mT[tid].pieces.end() )
+                    mT[tid].pieces.erase( it );
             }
             else
             {
@@ -1413,7 +1441,7 @@ namespace Ogre
         return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::collectPieces( const String &inBuffer, String &outBuffer )
+    bool Hlms::collectPieces( const String &inBuffer, String &outBuffer, const size_t tid )
     {
         outBuffer.clear();
         outBuffer.reserve( inBuffer.size() );
@@ -1426,7 +1454,7 @@ namespace Ogre
 
         while( pos != String::npos && !syntaxError )
         {
-            //Copy what comes before the block
+            // Copy what comes before the block
             copy( outBuffer, subString, pos );
 
             subString.setStart( subString.getStart() + pos + sizeof( "@piece" ) );
@@ -1437,8 +1465,8 @@ namespace Ogre
             if( !syntaxError )
             {
                 const IdString pieceName( argValues[0] );
-                PiecesMap::const_iterator it = mPieces.find( pieceName );
-                if( it != mPieces.end() )
+                PiecesMap::const_iterator it = mT[tid].pieces.find( pieceName );
+                if( it != mT[tid].pieces.end() )
                 {
                     syntaxError = true;
                     printf( "Error at line %lu: @piece '%s' already defined",
@@ -1451,7 +1479,7 @@ namespace Ogre
 
                     String tmpBuffer;
                     copy( tmpBuffer, blockSubString, blockSubString.getSize() );
-                    mPieces[pieceName] = tmpBuffer;
+                    mT[tid].pieces[pieceName] = tmpBuffer;
 
                     subString.setStart( blockSubString.getEnd() + sizeof( "@end" ) );
                 }
@@ -1470,7 +1498,7 @@ namespace Ogre
         return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::insertPieces( String &inBuffer, String &outBuffer ) const
+    bool Hlms::insertPieces( String &inBuffer, String &outBuffer, const size_t tid ) const
     {
         outBuffer.clear();
         outBuffer.reserve( inBuffer.size() );
@@ -1483,7 +1511,7 @@ namespace Ogre
 
         while( pos != String::npos && !syntaxError )
         {
-            //Copy what comes before the block
+            // Copy what comes before the block
             copy( outBuffer, subString, pos );
 
             subString.setStart( subString.getStart() + pos + sizeof( "@insertpiece" ) );
@@ -1494,8 +1522,8 @@ namespace Ogre
             if( !syntaxError )
             {
                 const IdString pieceName( argValues[0] );
-                PiecesMap::const_iterator it = mPieces.find( pieceName );
-                if( it != mPieces.end() )
+                PiecesMap::const_iterator it = mT[tid].pieces.find( pieceName );
+                if( it != mT[tid].pieces.end() )
                     outBuffer += it->second;
             }
             else
@@ -1512,21 +1540,15 @@ namespace Ogre
         return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-        const Operation c_counterOperations[10] =
-        {
-            Operation( "counter", sizeof( "@counter" ), 0 ),
-            Operation( "value", sizeof( "@value" ), 0 ),
-            Operation( "set", sizeof( "@set" ), &setOp ),
-            Operation( "add", sizeof( "@add" ), &addOp ),
-            Operation( "sub", sizeof( "@sub" ), &subOp ),
-            Operation( "mul", sizeof( "@mul" ), &mulOp ),
-            Operation( "div", sizeof( "@div" ), &divOp ),
-            Operation( "mod", sizeof( "@mod" ), &modOp ),
-            Operation( "min", sizeof( "@min" ), &minOp ),
-            Operation( "max", sizeof( "@max" ), &maxOp )
-        };
+    const Operation c_counterOperations[10] = {
+        Operation( "counter", sizeof( "@counter" ), 0 ), Operation( "value", sizeof( "@value" ), 0 ),
+        Operation( "set", sizeof( "@set" ), &setOp ),    Operation( "add", sizeof( "@add" ), &addOp ),
+        Operation( "sub", sizeof( "@sub" ), &subOp ),    Operation( "mul", sizeof( "@mul" ), &mulOp ),
+        Operation( "div", sizeof( "@div" ), &divOp ),    Operation( "mod", sizeof( "@mod" ), &modOp ),
+        Operation( "min", sizeof( "@min" ), &minOp ),    Operation( "max", sizeof( "@max" ), &maxOp )
+    };
     //-----------------------------------------------------------------------------------
-    bool Hlms::parseCounter( const String &inBuffer, String &outBuffer )
+    bool Hlms::parseCounter( const String &inBuffer, String &outBuffer, const size_t tid )
     {
         outBuffer.clear();
         outBuffer.reserve( inBuffer.size() );
@@ -1536,22 +1558,22 @@ namespace Ogre
 
         size_t pos;
         pos = subString.find( "@" );
-        size_t keyword = ~0;
+        size_t keyword = std::numeric_limits<size_t>::max();
 
         if( pos != String::npos )
         {
             size_t maxSize = subString.findFirstOf( " \t(", pos + 1 );
             maxSize = maxSize == String::npos ? subString.getSize() : maxSize;
             SubStringRef keywordStr( &inBuffer, subString.getStart() + pos + 1,
-                                                subString.getStart() + maxSize );
+                                     subString.getStart() + maxSize );
 
-            for( size_t i=0; i<10 && keyword == (size_t)~0; ++i )
+            for( size_t i = 0; i < 10 && keyword == std::numeric_limits<size_t>::max(); ++i )
             {
                 if( keywordStr.matchEqual( c_counterOperations[i].opName ) )
                     keyword = i;
             }
 
-            if( keyword == (size_t)~0 )
+            if( keyword == std::numeric_limits<size_t>::max() )
                 pos = String::npos;
         }
 
@@ -1559,7 +1581,7 @@ namespace Ogre
 
         while( pos != String::npos && !syntaxError )
         {
-            //Copy what comes before the block
+            // Copy what comes before the block
             copy( outBuffer, subString, pos );
 
             subString.setStart( subString.getStart() + pos + c_counterOperations[keyword].length );
@@ -1576,28 +1598,28 @@ namespace Ogre
                 {
                     const IdString dstProperty = argValues[0];
                     const IdString srcProperty = dstProperty;
-                    int op1Value = getProperty( srcProperty );
+                    int op1Value = getProperty( tid, srcProperty );
 
                     //@value & @counter write, the others are invisible
                     char tmp[16];
-                    sprintf( tmp, "%i", op1Value );
+                    std::snprintf( tmp, sizeof( tmp ), "%i", op1Value );
                     outBuffer += tmp;
 
                     if( keyword == 0 )
                     {
                         ++op1Value;
-                        setProperty( dstProperty, op1Value );
+                        setProperty( tid, dstProperty, op1Value );
                     }
                 }
                 else
                 {
                     const IdString dstProperty = argValues[0];
                     const size_t idx = argValues.size() == 3 ? 1 : 0;
-                    const int op1Value = interpretAsNumberThenAsProperty( argValues[idx] );
-                    const int op2Value = interpretAsNumberThenAsProperty( argValues[idx + 1] );
+                    const int op1Value = interpretAsNumberThenAsProperty( argValues[idx], tid );
+                    const int op2Value = interpretAsNumberThenAsProperty( argValues[idx + 1], tid );
 
                     int result = c_counterOperations[keyword].opFunc( op1Value, op2Value );
-                    setProperty( dstProperty, result );
+                    setProperty( tid, dstProperty, result );
                 }
             }
             else
@@ -1605,33 +1627,33 @@ namespace Ogre
                 unsigned long lineCount = calculateLineCount( subString );
                 if( keyword <= 1 )
                 {
-                    printf( "Syntax Error at line %lu: @%s expects one parameter\n",
-                            lineCount, c_counterOperations[keyword].opName );
+                    printf( "Syntax Error at line %lu: @%s expects one parameter\n", lineCount,
+                            c_counterOperations[keyword].opName );
                 }
                 else
                 {
-                    printf( "Syntax Error at line %lu: @%s expects two or three parameters\n",
-                            lineCount, c_counterOperations[keyword].opName );
+                    printf( "Syntax Error at line %lu: @%s expects two or three parameters\n", lineCount,
+                            c_counterOperations[keyword].opName );
                 }
             }
 
             pos = subString.find( "@" );
-            keyword = ~0;
+            keyword = std::numeric_limits<size_t>::max();
 
             if( pos != String::npos )
             {
                 size_t maxSize = subString.findFirstOf( " \t(", pos + 1 );
                 maxSize = maxSize == String::npos ? subString.getSize() : maxSize;
                 SubStringRef keywordStr( &inBuffer, subString.getStart() + pos + 1,
-                                                    subString.getStart() + maxSize );
+                                         subString.getStart() + maxSize );
 
-                for( size_t i=0; i<10 && keyword == (size_t)~0; ++i )
+                for( size_t i = 0; i < 10 && keyword == std::numeric_limits<size_t>::max(); ++i )
                 {
                     if( keywordStr.matchEqual( c_counterOperations[i].opName ) )
                         keyword = i;
                 }
 
-                if( keyword == (size_t)~0 )
+                if( keyword == std::numeric_limits<size_t>::max() )
                     pos = String::npos;
             }
         }
@@ -1641,75 +1663,192 @@ namespace Ogre
         return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-    bool Hlms::parse( const String &inBuffer, String &outBuffer ) const
+    bool Hlms::parseOffline( const String &filename, String &inString, String &outString,
+                             const size_t tid )
     {
-        outBuffer.clear();
-        outBuffer.reserve( inBuffer.size() );
+        mT[tid].setProperties.clear();
+        mT[tid].pieces.clear();
 
-        return parseForEach( inBuffer, outBuffer );
-        //return parseProperties( inBuffer, outBuffer );
+        if( mShaderProfile == "glsl" || mShaderProfile == "glslvk" )  // TODO: String comparision
+        {
+            setProperty( tid, HlmsBaseProp::GL3Plus, mRenderSystem->getNativeShadingLanguageVersion() );
+        }
+
+        setProperty( tid, HlmsBaseProp::Syntax, static_cast<int32>( mShaderSyntax.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::Hlsl, static_cast<int32>( HlmsBaseProp::Hlsl.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::Glsl, static_cast<int32>( HlmsBaseProp::Glsl.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::Glslvk,
+                     static_cast<int32>( HlmsBaseProp::Glslvk.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::Hlslvk,
+                     static_cast<int32>( HlmsBaseProp::Hlslvk.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::Metal, static_cast<int32>( HlmsBaseProp::Metal.getU32Value() ) );
+
+#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
+        setProperty( tid, HlmsBaseProp::iOS, 1 );
+#endif
+#if OGRE_PLATFORM == OGRE_PLATFORM_APPLE
+        setProperty( tid, HlmsBaseProp::macOS, 1 );
+#endif
+        setProperty( tid, HlmsBaseProp::Full32,
+                     static_cast<int32>( HlmsBaseProp::Full32.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::Midf16,
+                     static_cast<int32>( HlmsBaseProp::Midf16.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::Relaxed,
+                     static_cast<int32>( HlmsBaseProp::Relaxed.getU32Value() ) );
+        setProperty( tid, HlmsBaseProp::PrecisionMode, getSupportedPrecisionModeHash() );
+
+        if( mFastShaderBuildHack )
+            setProperty( tid, HlmsBaseProp::FastShaderBuildHack, 1 );
+
+        bool syntaxError = false;
+
+        syntaxError |= this->parseMath( inString, outString, tid );
+        while( !syntaxError && outString.find( "@foreach" ) != String::npos )
+        {
+            syntaxError |= this->parseForEach( outString, inString, tid );
+            inString.swap( outString );
+        }
+        syntaxError |= this->parseProperties( outString, inString, tid );
+        syntaxError |= this->parseUndefPieces( inString, outString, tid );
+        while( !syntaxError && ( outString.find( "@piece" ) != String::npos ||
+                                 outString.find( "@insertpiece" ) != String::npos ) )
+        {
+            syntaxError |= this->collectPieces( outString, inString, tid );
+            syntaxError |= this->insertPieces( inString, outString, tid );
+        }
+        syntaxError |= this->parseCounter( outString, inString, tid );
+
+        outString.swap( inString );
+
+        if( syntaxError )
+        {
+            LogManager::getSingleton().logMessage( "There were HLMS syntax errors while parsing " +
+                                                   filename );
+        }
+
+        return syntaxError;
     }
     //-----------------------------------------------------------------------------------
-    size_t Hlms::addRenderableCache( const HlmsPropertyVec &renderableSetProperties,
+    uint32 Hlms::addRenderableCache( const HlmsPropertyVec &renderableSetProperties,
                                      const PiecesMap *pieces )
     {
         assert( mRenderableCache.size() <= HlmsBits::RenderableMask );
 
         RenderableCache cacheEntry( renderableSetProperties, pieces );
 
-        RenderableCacheVec::iterator it = std::find( mRenderableCache.begin(), mRenderableCache.end(),
-                                                     cacheEntry );
+        RenderableCacheVec::iterator it =
+            std::find( mRenderableCache.begin(), mRenderableCache.end(), cacheEntry );
         if( it == mRenderableCache.end() )
         {
             mRenderableCache.push_back( cacheEntry );
             it = mRenderableCache.end() - 1;
         }
 
-        //3 bits for mType (see getMaterial)
-        return (mType << HlmsBits::HlmsTypeShift) |
-                ((it - mRenderableCache.begin()) << HlmsBits::RenderableShift);
+        // 3 bits for mType (see getMaterial)
+        return ( static_cast<uint32>( mType ) << HlmsBits::HlmsTypeShift ) |
+               ( static_cast<uint32>( it - mRenderableCache.begin() ) << HlmsBits::RenderableShift );
     }
     //-----------------------------------------------------------------------------------
     const Hlms::RenderableCache &Hlms::getRenderableCache( uint32 hash ) const
     {
-        return mRenderableCache[(hash >> HlmsBits::RenderableShift) & HlmsBits::RenderableMask];
+        return mRenderableCache[( hash >> HlmsBits::RenderableShift ) & HlmsBits::RenderableMask];
     }
     //-----------------------------------------------------------------------------------
-    HlmsDatablock* Hlms::createDefaultDatablock()
+    HlmsDatablock *Hlms::createDefaultDatablock()
     {
-        return createDatablock( IdString(), "[Default]",
-                                HlmsMacroblock(), HlmsBlendblock(), HlmsParamVec(), false );
+        return createDatablock( IdString(), "[Default]", HlmsMacroblock(), HlmsBlendblock(),
+                                HlmsParamVec(), false );
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::setHighQuality( bool highQuality )
+    void Hlms::setPrecisionMode( PrecisionMode precisionMode )
     {
-        clearShaderCache();
-        mHighQuality = highQuality;
+        if( mPrecisionMode != precisionMode )
+        {
+            clearShaderCache();
+            mPrecisionMode = precisionMode;
+        }
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::setMaxNonCasterDirectionalLights( uint16 maxLights )
+    Hlms::PrecisionMode Hlms::getPrecisionMode() const
     {
-        mNumLightsLimit = maxLights;
+        return static_cast<PrecisionMode>( mPrecisionMode );
+    }
+    //-----------------------------------------------------------------------------------
+    Hlms::PrecisionMode Hlms::getSupportedPrecisionMode() const
+    {
+        switch( mPrecisionMode )
+        {
+        case PrecisionFull32:
+            return PrecisionFull32;
+
+        case PrecisionMidf16:
+        {
+            const RenderSystemCapabilities *capabilities = mRenderSystem->getCapabilities();
+            if( capabilities->hasCapability( RSC_SHADER_FLOAT16 ) )
+                return PrecisionMidf16;
+            else if( capabilities->hasCapability( RSC_SHADER_RELAXED_FLOAT ) )
+                return PrecisionRelaxed;
+            else
+                return PrecisionFull32;
+        }
+
+        case PrecisionRelaxed:
+        {
+            const RenderSystemCapabilities *capabilities = mRenderSystem->getCapabilities();
+            if( capabilities->hasCapability( RSC_SHADER_RELAXED_FLOAT ) )
+                return PrecisionRelaxed;
+            else if( capabilities->hasCapability( RSC_SHADER_FLOAT16 ) )
+                return PrecisionMidf16;
+            else
+                return PrecisionFull32;
+        }
+        }
+
+        return static_cast<PrecisionMode>( mPrecisionMode );
+    }
+    //-----------------------------------------------------------------------------------
+    int32 Hlms::getSupportedPrecisionModeHash() const
+    {
+        switch( getSupportedPrecisionMode() )
+        {
+        case PrecisionFull32:
+            return static_cast<int32>( HlmsBaseProp::Full32.getU32Value() );
+        case PrecisionMidf16:
+            return static_cast<int32>( HlmsBaseProp::Midf16.getU32Value() );
+        case PrecisionRelaxed:
+            return static_cast<int32>( HlmsBaseProp::Relaxed.getU32Value() );
+        }
+
+        // Silence MSVC warning
+        return static_cast<int32>( HlmsBaseProp::Full32.getU32Value() );
+    }
+    //-----------------------------------------------------------------------------------
+    bool Hlms::getFastShaderBuildHack() const { return mFastShaderBuildHack; }
+    //-----------------------------------------------------------------------------------
+    void Hlms::setMaxNonCasterDirectionalLights( uint16 maxLights ) { mNumLightsLimit = maxLights; }
+    //-----------------------------------------------------------------------------------
+    void Hlms::setStaticBranchingLights( bool staticBranchingLights )
+    {
+        mStaticBranchingLights = staticBranchingLights;
     }
     //-----------------------------------------------------------------------------------
     void Hlms::setAreaLightForwardSettings( uint16 areaLightsApproxLimit, uint16 areaLightsLtcLimit )
     {
-        mNumAreaApproxLightsLimit   = areaLightsApproxLimit;
-        mNumAreaLtcLightsLimit      = areaLightsLtcLimit;
+        mNumAreaApproxLightsLimit = areaLightsApproxLimit;
+        mNumAreaLtcLightsLimit = areaLightsLtcLimit;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::saveAllTexturesFromDatablocks( const String &folderPath,
-                                              set<String>::type &savedTextures,
+    void Hlms::saveAllTexturesFromDatablocks( const String &folderPath, set<String>::type &savedTextures,
                                               bool saveOitd, bool saveOriginal,
                                               HlmsTextureExportListener *listener )
     {
         HlmsDatablockMap::const_iterator itor = mDatablocks.begin();
-        HlmsDatablockMap::const_iterator end  = mDatablocks.end();
+        HlmsDatablockMap::const_iterator endt = mDatablocks.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
-            itor->second.datablock->saveTextures( folderPath, savedTextures, saveOitd,
-                                                  saveOriginal, listener );
+            itor->second.datablock->saveTextures( folderPath, savedTextures, saveOitd, saveOriginal,
+                                                  listener );
             ++itor;
         }
     }
@@ -1723,9 +1862,9 @@ namespace Ogre
             mLibrary.clear();
 
             ArchiveVec::const_iterator itor = libraryFolders->begin();
-            ArchiveVec::const_iterator end  = libraryFolders->end();
+            ArchiveVec::const_iterator endt = libraryFolders->end();
 
-            while( itor != end )
+            while( itor != endt )
             {
                 Library library;
                 library.dataFolder = *itor;
@@ -1736,30 +1875,42 @@ namespace Ogre
         else
         {
             LibraryVec::iterator itor = mLibrary.begin();
-            LibraryVec::iterator end  = mLibrary.end();
+            LibraryVec::iterator endt = mLibrary.end();
 
-            while( itor != end )
+            while( itor != endt )
             {
-                for( size_t i=0; i<NumShaderTypes; ++i )
+                for( size_t i = 0; i < NumShaderTypes; ++i )
                     itor->pieceFiles[i].clear();
                 ++itor;
             }
         }
 
-        for( size_t i=0; i<NumShaderTypes; ++i )
+        for( size_t i = 0; i < NumShaderTypes; ++i )
             mPieceFiles[i].clear();
 
         mDataFolder = newDataFolder;
         enumeratePieceFiles();
+
+        // Reload datablock pieces (those that can be reloaded from disk).
+        for( auto &itor : mDatablockCustomPieceFiles )
+        {
+            DatablockCustomPieceFile &datablockCustomPiece = itor.second;
+            if( datablockCustomPiece.isCacheable() )
+            {
+                const DataStreamPtr stream = ResourceGroupManager::getSingleton().openResource(
+                    datablockCustomPiece.filename, datablockCustomPiece.resourceGroup );
+                datablockCustomPiece.sourceCode = stream->getAsString();
+            }
+        }
     }
     //-----------------------------------------------------------------------------------
     ArchiveVec Hlms::getPiecesLibraryAsArchiveVec() const
     {
         ArchiveVec retVal;
         LibraryVec::const_iterator itor = mLibrary.begin();
-        LibraryVec::const_iterator end  = mLibrary.end();
+        LibraryVec::const_iterator endt = mLibrary.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
             retVal.push_back( itor->dataFolder );
             ++itor;
@@ -1768,7 +1919,11 @@ namespace Ogre
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    HlmsDatablock* Hlms::createDatablock( IdString name, const String &refName,
+    void Hlms::_setNumThreads( size_t numThreads ) { mT.resize( numThreads ); }
+    //-----------------------------------------------------------------------------------
+    void Hlms::_setShadersGenerated( uint32 shadersGenerated ) { mShadersGenerated = shadersGenerated; }
+    //-----------------------------------------------------------------------------------
+    HlmsDatablock *Hlms::createDatablock( IdString name, const String &refName,
                                           const HlmsMacroblock &macroblockRef,
                                           const HlmsBlendblock &blendblockRef,
                                           const HlmsParamVec &paramVec, bool visibleToManager,
@@ -1776,8 +1931,10 @@ namespace Ogre
     {
         if( mDatablocks.find( name ) != mDatablocks.end() )
         {
-            OGRE_EXCEPT( Exception::ERR_DUPLICATE_ITEM, "A material datablock with name '" +
-                         name.getFriendlyText() + "' already exists.", "Hlms::createDatablock" );
+            OGRE_EXCEPT(
+                Exception::ERR_DUPLICATE_ITEM,
+                "A material datablock with name '" + name.getFriendlyText() + "' already exists.",
+                "Hlms::createDatablock" );
         }
 
         const HlmsMacroblock *macroblock = mHlmsManager->getMacroblock( macroblockRef );
@@ -1795,7 +1952,7 @@ namespace Ogre
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    HlmsDatablock* Hlms::getDatablock( IdString name ) const
+    HlmsDatablock *Hlms::getDatablock( IdString name ) const
     {
         HlmsDatablock *retVal = 0;
         HlmsDatablockMap::const_iterator itor = mDatablocks.find( name );
@@ -1805,7 +1962,7 @@ namespace Ogre
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    const String* Hlms::getNameStr(IdString name) const
+    const String *Hlms::getNameStr( IdString name ) const
     {
         String const *retVal = 0;
         HlmsDatablockMap::const_iterator itor = mDatablocks.find( name );
@@ -1815,19 +1972,19 @@ namespace Ogre
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::getFilenameAndResourceGroup( IdString name, String const * *outFilename,
-                                            String const * *outResourceGroup ) const
+    void Hlms::getFilenameAndResourceGroup( IdString name, String const **outFilename,
+                                            String const **outResourceGroup ) const
     {
         HlmsDatablockMap::const_iterator itor = mDatablocks.find( name );
         if( itor != mDatablocks.end() )
         {
-            *outFilename        = &itor->second.srcFile;
-            *outResourceGroup   = &itor->second.srcResourceGroup;
+            *outFilename = &itor->second.srcFile;
+            *outResourceGroup = &itor->second.srcResourceGroup;
         }
         else
         {
-            *outFilename        = 0;
-            *outResourceGroup   = 0;
+            *outFilename = 0;
+            *outResourceGroup = 0;
         }
     }
     //-----------------------------------------------------------------------------------
@@ -1851,9 +2008,9 @@ namespace Ogre
     void Hlms::_destroyAllDatablocks()
     {
         HlmsDatablockMap::const_iterator itor = mDatablocks.begin();
-        HlmsDatablockMap::const_iterator end  = mDatablocks.end();
+        HlmsDatablockMap::const_iterator endt = mDatablocks.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
             if( itor->second.visibleToManager && mHlmsManager )
                 mHlmsManager->_datablockDestroyed( itor->first );
@@ -1872,17 +2029,14 @@ namespace Ogre
         mDefaultDatablock = createDefaultDatablock();
     }
     //-----------------------------------------------------------------------------------
-    HlmsDatablock* Hlms::getDefaultDatablock() const
-    {
-        return mDefaultDatablock;
-    }
+    HlmsDatablock *Hlms::getDefaultDatablock() const { return mDefaultDatablock; }
     //-----------------------------------------------------------------------------------
     bool Hlms::findParamInVec( const HlmsParamVec &paramVec, IdString key, String &inOut )
     {
         bool retVal = false;
-        HlmsParamVec::const_iterator it = std::lower_bound( paramVec.begin(), paramVec.end(),
-                                                            std::pair<IdString, String>( key, String() ),
-                                                            OrderParamVecByKey );
+        HlmsParamVec::const_iterator it =
+            std::lower_bound( paramVec.begin(), paramVec.end(),
+                              std::pair<IdString, String>( key, String() ), OrderParamVecByKey );
         if( it != paramVec.end() && it->first == key )
         {
             inOut = it->second;
@@ -1892,14 +2046,15 @@ namespace Ogre
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    const HlmsCache* Hlms::addShaderCache( uint32 hash, const HlmsPso &pso )
+    HlmsCache *Hlms::addStubShaderCache( uint32 hash )
     {
-        HlmsCache cache( hash, mType, pso );
-        HlmsCacheVec::iterator it = std::lower_bound( mShaderCache.begin(), mShaderCache.end(),
-                                                      &cache, OrderCacheByHash );
+        HlmsCache cache( hash, mType, HLMS_CACHE_FLAGS_COMPILATION_REQUIRED, HlmsPso() );
+        HlmsCacheVec::iterator it =
+            std::lower_bound( mShaderCache.begin(), mShaderCache.end(), &cache, OrderCacheByHash );
 
-        assert( (it == mShaderCache.end() || (*it)->hash != hash) &&
-                "Can't add the same shader to the cache twice! (or a hash collision happened)" );
+        OGRE_ASSERT_LOW(
+            ( it == mShaderCache.end() || ( *it )->hash != hash ) &&
+            "Can't add the same shader to the cache twice! (or a hash collision happened)" );
 
         HlmsCache *retVal = new HlmsCache( cache );
         mShaderCache.insert( it, retVal );
@@ -1907,13 +2062,31 @@ namespace Ogre
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    const HlmsCache* Hlms::getShaderCache( uint32 hash ) const
+    const HlmsCache *Hlms::addShaderCache( uint32 hash, const HlmsPso &pso )
     {
-        HlmsCache cache( hash, mType, HlmsPso() );
-        HlmsCacheVec::const_iterator it = std::lower_bound( mShaderCache.begin(), mShaderCache.end(),
-                                                            &cache, OrderCacheByHash );
+        ScopedLock lock( mMutex );
 
-        if( it != mShaderCache.end() && (*it)->hash == hash )
+        HlmsCache cache( hash, mType, HLMS_CACHE_FLAGS_NONE, pso );
+        HlmsCacheVec::iterator it =
+            std::lower_bound( mShaderCache.begin(), mShaderCache.end(), &cache, OrderCacheByHash );
+
+        OGRE_ASSERT_LOW(
+            ( it == mShaderCache.end() || ( *it )->hash != hash ) &&
+            "Can't add the same shader to the cache twice! (or a hash collision happened)" );
+
+        HlmsCache *retVal = new HlmsCache( cache );
+        mShaderCache.insert( it, retVal );
+
+        return retVal;
+    }
+    //-----------------------------------------------------------------------------------
+    const HlmsCache *Hlms::getShaderCache( uint32 hash ) const
+    {
+        HlmsCache cache( hash, mType, HLMS_CACHE_FLAGS_NONE, HlmsPso() );
+        HlmsCacheVec::const_iterator it =
+            std::lower_bound( mShaderCache.begin(), mShaderCache.end(), &cache, OrderCacheByHash );
+
+        if( it != mShaderCache.end() && ( *it )->hash == hash )
             return *it;
 
         return 0;
@@ -1923,18 +2096,20 @@ namespace Ogre
     {
         mPassCache.clear();
 
-        //Empty mShaderCache so that mHlmsManager->destroyMacroblock would
-        //be harmless even if _notifyMacroblockDestroyed gets called.
+        // Empty mShaderCache so that mHlmsManager->destroyMacroblock would
+        // be harmless even if _notifyMacroblockDestroyed gets called.
         HlmsCacheVec shaderCache;
         shaderCache.swap( mShaderCache );
         HlmsCacheVec::const_iterator itor = shaderCache.begin();
-        HlmsCacheVec::const_iterator end  = shaderCache.end();
+        HlmsCacheVec::const_iterator endt = shaderCache.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
-            mRenderSystem->_hlmsPipelineStateObjectDestroyed( &(*itor)->pso );
-            if( (*itor)->pso.pass.hasStrongMacroblock() )
-                mHlmsManager->destroyMacroblock( (*itor)->pso.macroblock );
+            mRenderSystem->_hlmsPipelineStateObjectDestroyed( &( *itor )->pso );
+            if( ( *itor )->pso.strongBlocks & HlmsPso::HasStrongMacroblock )
+                mHlmsManager->destroyMacroblock( ( *itor )->pso.macroblock );
+            if( ( *itor )->pso.strongBlocks & HlmsPso::HasStrongBlendblock )
+                mHlmsManager->destroyBlendblock( ( *itor )->pso.blendblock );
 
             delete *itor;
             ++itor;
@@ -1943,84 +2118,87 @@ namespace Ogre
         shaderCache.clear();
 
         mShaderCodeCache.clear();
+        mShadersGenerated = 0u;
+        mShaderCodeCacheDirty = true;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::processPieces( Archive *archive, const StringVector &pieceFiles )
+    void Hlms::processPieces( Archive *archive, const StringVector &pieceFiles, const size_t tid )
     {
         StringVector::const_iterator itor = pieceFiles.begin();
-        StringVector::const_iterator end  = pieceFiles.end();
+        StringVector::const_iterator endt = pieceFiles.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
-            //Only open piece files with current render system extension
+            // Only open piece files with current render system extension
             const String::size_type extPos0 = itor->find( mShaderFileExt );
             const String::size_type extPos1 = itor->find( ".any" );
-            if( extPos0 == itor->size() - mShaderFileExt.size() ||
-                extPos1 == itor->size() - 4u )
+            if( extPos0 == itor->size() - mShaderFileExt.size() || extPos1 == itor->size() - 4u )
             {
-                DataStreamPtr inFile = archive->open(*itor);
+                DataStreamPtr inFile = archive->open( *itor );
 
                 String inString;
                 String outString;
 
-                inString.resize(inFile->size());
-                inFile->read(&inString[0], inFile->size());
+                inString.resize( inFile->size() );
+                inFile->read( &inString[0], inFile->size() );
 
-                this->parseMath(inString, outString);
+                this->parseMath( inString, outString, tid );
                 while( outString.find( "@foreach" ) != String::npos )
                 {
-                    this->parseForEach(outString, inString);
+                    this->parseForEach( outString, inString, tid );
                     inString.swap( outString );
                 }
-                this->parseProperties(outString, inString);
-                this->parseUndefPieces(inString, outString);
-                this->collectPieces(outString, inString);
-                this->parseCounter(inString, outString);
+                this->parseProperties( outString, inString, tid );
+                this->parseUndefPieces( inString, outString, tid );
+                this->collectPieces( outString, inString, tid );
+                this->parseCounter( inString, outString, tid );
             }
             ++itor;
         }
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::dumpProperties( std::ofstream &outFile )
+    void Hlms::dumpProperties( std::ofstream &outFile, const size_t tid )
     {
         outFile.write( "#if 0", sizeof( "#if 0" ) - 1u );
 
         char tmpBuffer[64];
         char friendlyText[32];
-        LwString value( LwString::FromEmptyPointer( tmpBuffer, sizeof(tmpBuffer) ) );
+        LwString value( LwString::FromEmptyPointer( tmpBuffer, sizeof( tmpBuffer ) ) );
 
         {
-            HlmsPropertyVec::const_iterator itor = mSetProperties.begin();
-            HlmsPropertyVec::const_iterator end  = mSetProperties.end();
+            HlmsPropertyVec::const_iterator itor = mT[tid].setProperties.begin();
+            HlmsPropertyVec::const_iterator endt = mT[tid].setProperties.end();
 
-            while( itor != end )
+            while( itor != endt )
             {
                 itor->keyName.getFriendlyText( friendlyText, 32 );
                 value.clear();
                 value.a( itor->value );
 
                 outFile.write( "\n\t***\t", sizeof( "\n\t***\t" ) - 1u );
-                outFile.write( friendlyText, strnlen( friendlyText, 32 ) );
+                outFile.write( friendlyText,
+                               static_cast<std::streamsize>( strnlen( friendlyText, 32 ) ) );
                 outFile.write( "\t", sizeof( "\t" ) - 1u );
-                outFile.write( value.c_str(), value.size() );
+                outFile.write( value.c_str(), static_cast<std::streamsize>( value.size() ) );
                 ++itor;
             }
         }
 
-        outFile.write( "\n\tDONE DUMPING PROPERTIES",
-                       sizeof( "\n\tDONE DUMPING PROPERTIES" ) - 1u );
+        outFile.write( "\n\tDONE DUMPING PROPERTIES", sizeof( "\n\tDONE DUMPING PROPERTIES" ) - 1u );
 
         {
-            PiecesMap::const_iterator itor = mPieces.begin();
-            PiecesMap::const_iterator end  = mPieces.end();
+            PiecesMap::const_iterator itor = mT[tid].pieces.begin();
+            PiecesMap::const_iterator endt = mT[tid].pieces.end();
 
-            while( itor != end )
+            while( itor != endt )
             {
                 itor->first.getFriendlyText( friendlyText, 32 );
                 outFile.write( "\n\t***\t", sizeof( "\n\t***\t" ) - 1u );
-                outFile.write( friendlyText, strnlen( friendlyText, 32 ) );
+                outFile.write( friendlyText,
+                               static_cast<std::streamsize>( strnlen( friendlyText, 32 ) ) );
                 outFile.write( "\t", sizeof( "\t" ) - 1u );
-                outFile.write( itor->second.c_str(), itor->second.size() );
+                outFile.write( itor->second.c_str(),
+                               static_cast<std::streamsize>( itor->second.size() ) );
                 ++itor;
             }
         }
@@ -2029,86 +2207,292 @@ namespace Ogre
                        sizeof( "\n\tDONE DUMPING PIECES\n#endif\n" ) - 1u );
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::applyStrongMacroblockRules( HlmsPso &pso )
+    void Hlms::applyStrongBlockRules( HlmsPso &pso, const size_t tid )
     {
-        if( !pso.macroblock->mDepthCheck )
-        {
-            //Depth check is already off, we don't need to hold a strong reference.
-            pso.pass.strongMacroblockBits &= ~HlmsPassPso::NoDepthBuffer;
-        }
-        if( !pso.macroblock->mDepthWrite )
-        {
-            //Depth writes is already off, we don't need to hold a strong reference.
-            pso.pass.strongMacroblockBits &= ~HlmsPassPso::ForceDisableDepthWrites;
-        }
-        if( pso.macroblock->mCullMode == CULL_NONE )
-        {
-            //Without culling there's nothing to invert, we don't need to hold a strong reference.
-            pso.pass.strongMacroblockBits &= ~HlmsPassPso::InvertVertexWinding;
-        }
-        if( pso.macroblock->mDepthClamp )
-        {
-            //Macroblock already enabled depth clamp, we don't need to hold a strong reference.
-            pso.pass.strongMacroblockBits &= ~HlmsPassPso::ForceDepthClamp;
-        }
+        OGRE_ASSERT_LOW( pso.strongBlocks == 0 );
 
-        if( pso.pass.hasStrongMacroblock() )
-        {
-            HlmsMacroblock prepassMacroblock = *pso.macroblock;
+        // Modify a macroblock if needed.
+        HlmsMacroblock macroblock = *pso.macroblock;
+        macroblock.mRsData = nullptr;
+        // Allow the listener to modify a macroblock.
+        mListener->applyStrongMacroblockRules( macroblock, mT[tid].setProperties );
+        // Allow the implementation (inherited classes) to modify a macroblock.
+        applyStrongMacroblockRules( macroblock, tid );
+        OGRE_ASSERT_LOW( macroblock.mRsData == nullptr &&
+                         "Implementation override must not reassign a macroblock!" );
 
-            //This pass has no depth buffer, disable check and keep a hard copy (strong ref.)
-            if( pso.pass.strongMacroblockBits & HlmsPassPso::NoDepthBuffer )
-                prepassMacroblock.mDepthCheck = false;
-            //This is a depth prepass, disable depth writes and keep a hard copy (strong ref.)
-            if( pso.pass.strongMacroblockBits & HlmsPassPso::ForceDisableDepthWrites )
-                prepassMacroblock.mDepthWrite = false;
-            //We need to invert culling mode.
-            if( pso.pass.strongMacroblockBits & HlmsPassPso::InvertVertexWinding )
+        // Modify a blendblock if needed.
+        HlmsBlendblock blendblock = *pso.blendblock;
+        blendblock.mRsData = nullptr;
+        // Allow the listener to modify a blendblock.
+        mListener->applyStrongBlendblockRules( blendblock, mT[tid].setProperties );
+        // Allow the implementation (inherited classes) to modify a blendblock.
+        applyStrongBlendblockRules( blendblock, tid );
+        OGRE_ASSERT_LOW( blendblock.mRsData == nullptr &&
+                         "Implementation override must not reassign a blendblock!" );
+
+        const bool bNeedsStrongMacroblock = macroblock != *pso.macroblock;
+        const bool bNeedsStrongBlendblock = blendblock != *pso.blendblock;
+        if( bNeedsStrongMacroblock || bNeedsStrongBlendblock )
+        {
+            // mHlmsManager->getMacroblock or mHlmsManager->getBlendblock may be
+            // called from different Hlms implementations.
+            ScopedLock lock( msGlobalMutex );
+
+            if( bNeedsStrongMacroblock )
             {
-                prepassMacroblock.mCullMode = prepassMacroblock.mCullMode == CULL_CLOCKWISE ?
-                            CULL_ANTICLOCKWISE : CULL_CLOCKWISE;
+                pso.macroblock = mHlmsManager->getMacroblock( macroblock );
+                pso.strongBlocks |= HlmsPso::HasStrongMacroblock;
             }
-            //Force depth clamp. Probably a directional shadow caster pass
-            if( pso.pass.strongMacroblockBits & HlmsPassPso::ForceDepthClamp )
-                prepassMacroblock.mDepthClamp = true;
 
-            pso.macroblock = mHlmsManager->getMacroblock( prepassMacroblock );
+            if( bNeedsStrongBlendblock )
+            {
+                pso.blendblock = mHlmsManager->getBlendblock( blendblock );
+                pso.strongBlocks |= HlmsPso::HasStrongBlendblock;
+            }
         }
     }
     //-----------------------------------------------------------------------------------
-    HighLevelGpuProgramPtr Hlms::compileShaderCode( const String &source,
-                                                    const String &debugFilenameOutput,
-                                                    uint32 finalHash,
-                                                    ShaderType shaderType )
+    void Hlms::applyStrongMacroblockRules( HlmsMacroblock &macroblock, const size_t tid ) const
     {
-        HighLevelGpuProgramManager *gpuProgramManager =
-                HighLevelGpuProgramManager::getSingletonPtr();
+        const uint32 strongMacroblockBits =
+            bit_cast<uint32_t>( getProperty( tid, HlmsPsoProp::StrongMacroblockBits ) );
+        if( strongMacroblockBits == 0 )
+            return;
 
-        HighLevelGpuProgramPtr gp = gpuProgramManager->createProgram(
-                    StringConverter::toString( finalHash ) + ShaderFiles[shaderType],
-                    ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME,
-                    mShaderProfile, static_cast<GpuProgramType>(shaderType) );
+        // HlmsMacroblock::mScissorTestEnabled
+        if( ( strongMacroblockBits & HlmsMacroblock::InvertScissorTest ) ==
+            HlmsMacroblock::InvertScissorTest )
+        {
+            macroblock.mScissorTestEnabled = !macroblock.mScissorTestEnabled;
+        }
+        else if( strongMacroblockBits & HlmsMacroblock::ScissorTestEnabled )
+            macroblock.mScissorTestEnabled = true;
+        else if( strongMacroblockBits & HlmsMacroblock::ScissorTestDisabled )
+            macroblock.mScissorTestEnabled = false;
+
+        // HlmsMacroblock::mDepthClamp
+        if( ( strongMacroblockBits & HlmsMacroblock::InvertDepthClamp ) ==
+            HlmsMacroblock::InvertDepthClamp )
+        {
+            macroblock.mDepthClamp = !macroblock.mDepthClamp;
+        }
+        else if( strongMacroblockBits & HlmsMacroblock::DepthClampEnabled )
+            macroblock.mDepthClamp = true;
+        else if( strongMacroblockBits & HlmsMacroblock::DepthClampDisabled )
+            macroblock.mDepthClamp = false;
+
+        // HlmsMacroblock::mDepthCheck
+        if( ( strongMacroblockBits & HlmsMacroblock::InvertDepthCheck ) ==
+            HlmsMacroblock::InvertDepthCheck )
+        {
+            macroblock.mDepthCheck = !macroblock.mDepthCheck;
+        }
+        else if( strongMacroblockBits & HlmsMacroblock::DepthCheckEnabled )
+            macroblock.mDepthCheck = true;
+        else if( strongMacroblockBits & HlmsMacroblock::DepthCheckDisabled )
+            macroblock.mDepthCheck = false;
+
+        // HlmsMacroblock::mDepthWrite
+        if( ( strongMacroblockBits & HlmsMacroblock::InvertDepthWrite ) ==
+            HlmsMacroblock::InvertDepthWrite )
+        {
+            macroblock.mDepthWrite = !macroblock.mDepthWrite;
+        }
+        else if( strongMacroblockBits & HlmsMacroblock::DepthWriteEnabled )
+            macroblock.mDepthWrite = true;
+        else if( strongMacroblockBits & HlmsMacroblock::DepthWriteDisabled )
+            macroblock.mDepthWrite = false;
+
+        // HlmsMacroblock::mDepthFunc
+        static_assert( ( HlmsMacroblock::DepthFunc_ALWAYS_FAIL >> 8u ) - 1 == CMPF_ALWAYS_FAIL,
+                       "DepthFunc_ALWAYS_FAIL doesn't match the CMPF_ALWAYS_FAIL." );
+        static_assert( ( HlmsMacroblock::DepthFunc_ALWAYS_PASS >> 8u ) - 1 == CMPF_ALWAYS_PASS,
+                       "DepthFunc_ALWAYS_PASS doesn't match the CMPF_ALWAYS_PASS." );
+        static_assert( ( HlmsMacroblock::DepthFunc_LESS >> 8u ) - 1 == CMPF_LESS,
+                       "DepthFunc_LESS doesn't match the CMPF_LESS." );
+        static_assert( ( HlmsMacroblock::DepthFunc_LESS_EQUAL >> 8u ) - 1 == CMPF_LESS_EQUAL,
+                       "DepthFunc_LESS_EQUAL doesn't match the CMPF_LESS_EQUAL." );
+        static_assert( ( HlmsMacroblock::DepthFunc_EQUAL >> 8u ) - 1 == CMPF_EQUAL,
+                       "DepthFunc_EQUAL doesn't match the CMPF_EQUAL." );
+        static_assert( ( HlmsMacroblock::DepthFunc_NOT_EQUAL >> 8u ) - 1 == CMPF_NOT_EQUAL,
+                       "DepthFunc_NOT_EQUAL doesn't match the CMPF_NOT_EQUAL." );
+        static_assert( ( HlmsMacroblock::DepthFunc_GREATER_EQUAL >> 8u ) - 1 == CMPF_GREATER_EQUAL,
+                       "DepthFunc_GREATER_EQUAL doesn't match the CMPF_GREATER_EQUAL." );
+        static_assert( ( HlmsMacroblock::DepthFunc_GREATER >> 8u ) - 1 == CMPF_GREATER,
+                       "DepthFunc_GREATER doesn't match the CMPF_GREATER." );
+        static_assert( NUM_COMPARE_FUNCTIONS == 8,
+                       "CompareFunction enum has been changed. Update the "
+                       "Hlms::applyStrongMacroblockRules implementation." );
+        const uint32 depthFunc = ( strongMacroblockBits & HlmsMacroblock::DepthFuncMask );
+        if( depthFunc > 0 )
+            macroblock.mDepthFunc = static_cast<CompareFunction>( ( depthFunc >> 8u ) - 1 );
+
+        // HlmsMacroblock::mCullMode
+        static_assert( ( HlmsMacroblock::CullingMode_NONE >> 12u ) == CULL_NONE,
+                       "CullingMode_NONE doesn't match the CULL_NONE." );
+        static_assert( ( HlmsMacroblock::CullingMode_CLOCKWISE >> 12u ) == CULL_CLOCKWISE,
+                       "CullingMode_CLOCKWISE doesn't match the CULL_CLOCKWISE." );
+        static_assert( ( HlmsMacroblock::CullingMode_ANTICLOCKWISE >> 12u ) == CULL_ANTICLOCKWISE,
+                       "CullingMode_ANTICLOCKWISE doesn't match the CULL_ANTICLOCKWISE." );
+        const uint32 cullingMode = ( strongMacroblockBits & HlmsMacroblock::CullingModeMask );
+        if( cullingMode > 0u )
+            macroblock.mCullMode = static_cast<CullingMode>( cullingMode >> 12u );
+
+        if( strongMacroblockBits & HlmsMacroblock::InvertCullingMode &&
+            macroblock.mCullMode != CULL_NONE )
+        {
+            macroblock.mCullMode =
+                macroblock.mCullMode == CULL_CLOCKWISE ? CULL_ANTICLOCKWISE : CULL_CLOCKWISE;
+        }
+
+        // HlmsMacroblock::mPolygonMode
+        static_assert( ( HlmsMacroblock::PolygonMode_POINTS >> 15u ) == PM_POINTS,
+                       "PolygonMode_POINTS doesn't match the PM_POINTS." );
+        static_assert( ( HlmsMacroblock::PolygonMode_WIREFRAME >> 15u ) == PM_WIREFRAME,
+                       "PolygonMode_WIREFRAME doesn't match the PM_WIREFRAME." );
+        static_assert( ( HlmsMacroblock::PolygonMode_SOLID >> 15u ) == PM_SOLID,
+                       "PolygonMode_SOLID doesn't match the PM_SOLID." );
+        const uint32 polygonMode = ( strongMacroblockBits & HlmsMacroblock::PolygonModeMask );
+        if( polygonMode > 0 )
+            macroblock.mPolygonMode = static_cast<PolygonMode>( polygonMode >> 16u );
+    }
+    //-----------------------------------------------------------------------------------
+    void Hlms::applyStrongBlendblockRules( HlmsBlendblock &blendblock, const size_t tid ) const
+    {
+        const uint32 strongBlendblockBits =
+            bit_cast<uint32_t>( getProperty( tid, HlmsPsoProp::StrongBlendblockBits ) );
+        if( strongBlendblockBits == 0 )
+            return;
+
+        static_assert( HlmsBlendblock::SourceBlendFactor_ONE - 1 == SBF_ONE,
+                       "SourceBlendFactor_ONE doesn't match the SBF_ONE." );
+        static_assert( HlmsBlendblock::SourceBlendFactor_ZERO - 1 == SBF_ZERO,
+                       "SourceBlendFactor_ZERO doesn't match the SBF_ZERO." );
+        static_assert( HlmsBlendblock::SourceBlendFactor_DEST_COLOUR - 1 == SBF_DEST_COLOUR,
+                       "SourceBlendFactor_DEST_COLOUR doesn't match the SBF_DEST_COLOUR." );
+        static_assert( HlmsBlendblock::SourceBlendFactor_SOURCE_COLOUR - 1 == SBF_SOURCE_COLOUR,
+                       "SourceBlendFactor_SOURCE_COLOUR doesn't match the SBF_SOURCE_COLOUR." );
+        static_assert(
+            HlmsBlendblock::SourceBlendFactor_ONE_MINUS_DEST_COLOUR - 1 == SBF_ONE_MINUS_DEST_COLOUR,
+            "SourceBlendFactor_ONE_MINUS_DEST_COLOUR doesn't match the SBF_ONE_MINUS_DEST_COLOUR." );
+        static_assert(
+            HlmsBlendblock::SourceBlendFactor_ONE_MINUS_SOURCE_COLOUR - 1 == SBF_ONE_MINUS_SOURCE_COLOUR,
+            "SourceBlendFactor_ONE_MINUS_SOURCE_COLOUR doesn't match the SBF_ONE_MINUS_SOURCE_COLOUR." );
+        static_assert( HlmsBlendblock::SourceBlendFactor_DEST_ALPHA - 1 == SBF_DEST_ALPHA,
+                       "SourceBlendFactor_DEST_ALPHA doesn't match the SBF_DEST_ALPHA." );
+        static_assert( HlmsBlendblock::SourceBlendFactor_SOURCE_ALPHA - 1 == SBF_SOURCE_ALPHA,
+                       "SourceBlendFactor_SOURCE_ALPHA doesn't match the SBF_SOURCE_ALPHA." );
+        static_assert(
+            HlmsBlendblock::SourceBlendFactor_ONE_MINUS_DEST_ALPHA - 1 == SBF_ONE_MINUS_DEST_ALPHA,
+            "SourceBlendFactor_ONE_MINUS_DEST_ALPHA doesn't match the SBF_ONE_MINUS_DEST_ALPHA." );
+        static_assert(
+            HlmsBlendblock::SourceBlendFactor_ONE_MINUS_SOURCE_ALPHA - 1 == SBF_ONE_MINUS_SOURCE_ALPHA,
+            "SourceBlendFactor_ONE_MINUS_SOURCE_ALPHA doesn't match the SBF_ONE_MINUS_SOURCE_ALPHA." );
+
+        // HlmsBlendblock::mSourceBlendFactor
+        const uint32 sourceBlendFactor =
+            ( strongBlendblockBits & HlmsBlendblock::SourceBlendFactorMask );
+        if( sourceBlendFactor > 0 )
+        {
+            blendblock.mSourceBlendFactor =
+                static_cast<SceneBlendFactor>( ( sourceBlendFactor >> 0u ) - 1u );
+        }
+
+        // HlmsBlendblock::mDestBlendFactor
+        const uint32 destBlendFactor = ( strongBlendblockBits & HlmsBlendblock::DestBlendFactorMask );
+        if( destBlendFactor > 0 )
+        {
+            blendblock.mDestBlendFactor =
+                static_cast<SceneBlendFactor>( ( destBlendFactor >> 4u ) - 1u );
+        }
+
+        // HlmsBlendblock::mSourceBlendFactorAlpha
+        const uint32 sourceBlendFactorAplha =
+            ( strongBlendblockBits & HlmsBlendblock::SourceBlendFactorAlphaMask );
+        if( sourceBlendFactorAplha > 0 )
+        {
+            blendblock.mSourceBlendFactorAlpha =
+                static_cast<SceneBlendFactor>( ( sourceBlendFactorAplha >> 8u ) - 1u );
+        }
+
+        // HlmsBlendblock::mDestBlendFactorAlpha
+        const uint32 destBlendFactorAlpha =
+            ( strongBlendblockBits & HlmsBlendblock::DestBlendFactorAlphaMask );
+        if( destBlendFactorAlpha > 0 )
+        {
+            blendblock.mDestBlendFactorAlpha =
+                static_cast<SceneBlendFactor>( ( destBlendFactorAlpha >> 12u ) - 1u );
+        }
+
+        static_assert( ( HlmsBlendblock::BlendOperation_ADD - 1 ) >> 16u == SBO_ADD,
+                       "BlendOperation_ADD doesn't match the SBO_ADD." );
+        static_assert( ( HlmsBlendblock::BlendOperation_SUBTRACT - 1 ) >> 16u == SBO_SUBTRACT,
+                       "BlendOperation_SUBTRACT doesn't match the SBO_SUBTRACT." );
+        static_assert(
+            ( HlmsBlendblock::BlendOperation_REVERSE_SUBTRACT - 1 ) >> 16u == SBO_REVERSE_SUBTRACT,
+            "BlendOperation_REVERSE_SUBTRACT doesn't match the SBO_REVERSE_SUBTRACT." );
+        static_assert( ( HlmsBlendblock::BlendOperation_MIN - 1 ) >> 16u == SBO_MIN,
+                       "BlendOperation_MIN doesn't match the SBO_MIN." );
+        static_assert( ( HlmsBlendblock::BlendOperation_MAX - 1 ) >> 16u == SBO_MAX,
+                       "BlendOperation_MAX doesn't match the SBO_MAX." );
+
+        // HlmsBlendblock::mBlendOperation
+        const uint32 blendOperation = ( strongBlendblockBits & HlmsBlendblock::BlendOperationMask );
+        if( blendOperation > 0 )
+        {
+            blendblock.mBlendOperation =
+                static_cast<SceneBlendOperation>( ( blendOperation >> 16u ) - 1u );
+        }
+
+        // HlmsBlendblock::mBlendOperationAlpha
+        const uint32 blendOperationAlpha =
+            ( strongBlendblockBits & HlmsBlendblock::BlendOperationAlphaMask );
+        if( blendOperationAlpha > 0 )
+        {
+            blendblock.mBlendOperationAlpha =
+                static_cast<SceneBlendOperation>( ( blendOperationAlpha >> 20u ) - 1u );
+        }
+
+        blendblock.calculateSeparateBlendMode();
+    }
+    //-----------------------------------------------------------------------------------
+    HighLevelGpuProgramPtr Hlms::compileShaderCode( const String &source,
+                                                    const String &debugFilenameOutput, uint32 finalHash,
+                                                    ShaderType shaderType, const size_t tid )
+    {
+        HighLevelGpuProgramManager *gpuProgramManager = HighLevelGpuProgramManager::getSingletonPtr();
+
+        HighLevelGpuProgramPtr gp;
+        {
+            // gpuProgramManager->createProgram may be called from different Hlms implementations
+            ScopedLock lock( msGlobalMutex );
+            gp = gpuProgramManager->createProgram(
+                StringConverter::toString( finalHash ) + ShaderFiles[shaderType],
+                ResourceGroupManager::INTERNAL_RESOURCE_GROUP_NAME, mShaderProfile,
+                static_cast<GpuProgramType>( shaderType ) );
+        }
         gp->setSource( source, debugFilenameOutput );
 
         {
             RootLayout rootLayout;
-            setupRootLayout( rootLayout );
+            setupRootLayout( rootLayout, tid );
             gp->setRootLayout( gp->getType(), rootLayout );
         }
 
         if( mShaderTargets[shaderType] )
         {
-            //D3D-specific
+            // D3D-specific
             gp->setParameter( "target", *mShaderTargets[shaderType] );
             gp->setParameter( "entry_point", "main" );
         }
 
         gp->setBuildParametersFromReflection( false );
-        gp->setSkeletalAnimationIncluded( getProperty( HlmsBaseProp::Skeleton ) != 0 );
+        gp->setSkeletalAnimationIncluded( getProperty( tid, HlmsBaseProp::Skeleton ) != 0 );
         gp->setMorphAnimationIncluded( false );
-        gp->setPoseAnimationIncluded( getProperty( HlmsBaseProp::Pose ) != 0 );
-        gp->setVpAndRtArrayIndexFromAnyShaderRequired( getProperty( HlmsBaseProp::InstancedStereo ) !=
-                                                       0 );
+        gp->setPoseAnimationIncluded( getProperty( tid, HlmsBaseProp::Pose ) != 0 );
+        gp->setVpAndRtArrayIndexFromAnyShaderRequired(
+            getProperty( tid, HlmsBaseProp::InstancedStereo ) != 0 );
         gp->setVertexTextureFetchRequired( false );
 
         gp->load();
@@ -2117,19 +2501,19 @@ namespace Ogre
     }
     //-----------------------------------------------------------------------------------
     void Hlms::_compileShaderFromPreprocessedSource( const RenderableCache &mergedCache,
-                                                     const String source[NumShaderTypes] )
+                                                     const String source[NumShaderTypes],
+                                                     const uint32 shaderCounter, const size_t tid )
     {
         OgreProfileExhaustive( "Hlms::_compileShaderFromPreprocessedSource" );
 
-        const uint32 finalHash = mType * 100000000u +
-                                 static_cast<uint32>( mShaderCodeCache.size() );
+        const uint32 uniqueName = mType * 100000000u + shaderCounter;
 
         ShaderCodeCache codeCache( mergedCache.pieces );
         codeCache.mergedCache.setProperties = mergedCache.setProperties;
 
-        codeCache.mergedCache.setProperties.swap( mSetProperties );
+        codeCache.mergedCache.setProperties.swap( mT[tid].setProperties );
 
-        for( size_t i=0; i<NumShaderTypes; ++i )
+        for( size_t i = 0; i < NumShaderTypes; ++i )
         {
             if( !source[i].empty() )
             {
@@ -2137,106 +2521,159 @@ namespace Ogre
                 std::ofstream debugDumpFile;
                 if( mDebugOutput )
                 {
-                    debugFilenameOutput = mOutputPath + "./" +
-                                          StringConverter::toString( finalHash ) +
+                    debugFilenameOutput = mOutputPath + "./" + StringConverter::toString( uniqueName ) +
                                           ShaderFiles[i] + mShaderFileExt;
-                    debugDumpFile.open( Ogre::fileSystemPathFromString(debugFilenameOutput).c_str(), std::ios::out | std::ios::binary );
+                    debugDumpFile.open( Ogre::fileSystemPathFromString( debugFilenameOutput ).c_str(),
+                                        std::ios::out | std::ios::binary );
 
                     if( mDebugOutputProperties )
-                        dumpProperties( debugDumpFile );
+                        dumpProperties( debugDumpFile, tid );
                 }
 
-                codeCache.shaders[i] = compileShaderCode( source[i], "", finalHash,
-                                                          static_cast<ShaderType>( i ) );
+                codeCache.shaders[i] =
+                    compileShaderCode( source[i], "", uniqueName, static_cast<ShaderType>( i ), tid );
+
+                if( mDebugOutput )
+                {
+                    debugDumpFile.write( source[i].c_str(),
+                                         static_cast<std::streamsize>( source[i].size() ) );
+                }
             }
         }
 
-        codeCache.mergedCache.setProperties.swap( mSetProperties );
+        codeCache.mergedCache.setProperties.swap( mT[tid].setProperties );
 
         // Ensure code didn't accidentally modify mSetProperties
         OGRE_ASSERT_HIGH( codeCache.mergedCache.setProperties == mergedCache.setProperties );
 
+        ScopedLock lock( mMutex );
         mShaderCodeCache.push_back( codeCache );
+        mShaderCodeCacheDirty = true;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::compileShaderCode( ShaderCodeCache &codeCache )
+    void Hlms::parseCustomPiece( const int32 customPieceName, const size_t tid )
+    {
+        // Parse custom arbitrary shader piece specified by the datablock.
+        DatablockCustomPieceFileMap::const_iterator it =
+            mDatablockCustomPieceFiles.find( customPieceName );
+        OGRE_ASSERT_LOW( it != mDatablockCustomPieceFiles.end() );
+
+        String inString = it->second.sourceCode;
+        String outString;
+
+        this->parseMath( inString, outString, tid );
+        while( outString.find( "@foreach" ) != String::npos )
+        {
+            this->parseForEach( outString, inString, tid );
+            inString.swap( outString );
+        }
+        this->parseProperties( outString, inString, tid );
+        this->parseUndefPieces( inString, outString, tid );
+        this->collectPieces( outString, inString, tid );
+        this->parseCounter( inString, outString, tid );
+    }
+    //-----------------------------------------------------------------------------------
+    void Hlms::compileShaderCode( ShaderCodeCache &codeCache, const uint32 shaderCounter,
+                                  const size_t tid )
     {
         OgreProfileExhaustive( "Hlms::compileShaderCode" );
 
-        //Give the shaders friendly base-10 names
-        const uint32 finalHash = mType * 100000000u + static_cast<uint32>( mShaderCodeCache.size() );
+        // Give the shaders friendly base-10 names
+        const uint32 uniqueName = mType * 100000000u + shaderCounter;
 
-        mSetProperties = codeCache.mergedCache.setProperties;
+        mT[tid].setProperties = codeCache.mergedCache.setProperties;
 
-        //Generate the shaders
-        for( size_t i=0; i<NumShaderTypes; ++i )
+        // Generate the shaders
+        for( size_t i = 0; i < NumShaderTypes; ++i )
         {
-            //Collect pieces
-            mPieces = codeCache.mergedCache.pieces[i];
+            // Collect pieces
+            mT[tid].pieces = codeCache.mergedCache.pieces[i];
 
             const String filename = ShaderFiles[i] + mShaderFileExt;
             if( mDataFolder->exists( filename ) )
             {
-                if( mShaderProfile == "glsl" || mShaderProfile == "glslvk" ) //TODO: String comparision
+                if( mShaderProfile == "glsl" || mShaderProfile == "glslvk" )  // TODO: String comparision
                 {
-                    setProperty( HlmsBaseProp::GL3Plus,
-                                 mRenderSystem->getNativeShadingLanguageVersion() );
-                }
-                else if( mShaderProfile == "glsles" ) //TODO: String comparision
-                {
-                    setProperty( HlmsBaseProp::GLES,
+                    setProperty( tid, HlmsBaseProp::GL3Plus,
                                  mRenderSystem->getNativeShadingLanguageVersion() );
                 }
 
-                setProperty( HlmsBaseProp::Syntax,  mShaderSyntax.mHash );
-                setProperty( HlmsBaseProp::Hlsl,    HlmsBaseProp::Hlsl.mHash );
-                setProperty( HlmsBaseProp::Glsl,    HlmsBaseProp::Glsl.mHash );
-                setProperty( HlmsBaseProp::Glsles,  HlmsBaseProp::Glsles.mHash );
-                setProperty( HlmsBaseProp::Glslvk,  HlmsBaseProp::Glslvk.mHash );
-                setProperty( HlmsBaseProp::Hlslvk,  HlmsBaseProp::Hlslvk.mHash );
-                setProperty( HlmsBaseProp::Metal,   HlmsBaseProp::Metal.mHash );
+                setProperty( tid, HlmsBaseProp::Syntax,
+                             static_cast<int32>( mShaderSyntax.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::Hlsl,
+                             static_cast<int32>( HlmsBaseProp::Hlsl.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::Glsl,
+                             static_cast<int32>( HlmsBaseProp::Glsl.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::Glslvk,
+                             static_cast<int32>( HlmsBaseProp::Glslvk.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::Hlslvk,
+                             static_cast<int32>( HlmsBaseProp::Hlslvk.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::Metal,
+                             static_cast<int32>( HlmsBaseProp::Metal.getU32Value() ) );
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE_IOS
-                setProperty( HlmsBaseProp::iOS, 1 );
+                setProperty( tid, HlmsBaseProp::iOS, 1 );
 #endif
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE
-                setProperty( HlmsBaseProp::macOS, 1 );
+                setProperty( tid, HlmsBaseProp::macOS, 1 );
 #endif
-                setProperty( HlmsBaseProp::HighQuality, mHighQuality );
+                setProperty( tid, HlmsBaseProp::Full32,
+                             static_cast<int32>( HlmsBaseProp::Full32.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::Midf16,
+                             static_cast<int32>( HlmsBaseProp::Midf16.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::Relaxed,
+                             static_cast<int32>( HlmsBaseProp::Relaxed.getU32Value() ) );
+                setProperty( tid, HlmsBaseProp::PrecisionMode, getSupportedPrecisionModeHash() );
 
                 if( mFastShaderBuildHack )
-                    setProperty( HlmsBaseProp::FastShaderBuildHack, 1 );
+                    setProperty( tid, HlmsBaseProp::FastShaderBuildHack, 1 );
 
                 String debugFilenameOutput;
                 std::ofstream debugDumpFile;
                 if( mDebugOutput )
                 {
-                    debugFilenameOutput = mOutputPath + "./" +
-                                          StringConverter::toString( finalHash ) +
+                    debugFilenameOutput = mOutputPath + "./" + StringConverter::toString( uniqueName ) +
                                           ShaderFiles[i] + mShaderFileExt;
-                    debugDumpFile.open( Ogre::fileSystemPathFromString(debugFilenameOutput).c_str(), std::ios::out | std::ios::binary );
+                    debugDumpFile.open( Ogre::fileSystemPathFromString( debugFilenameOutput ).c_str(),
+                                        std::ios::out | std::ios::binary );
 
-                    //We need to dump the properties before processing the files, as these
-                    //may be overwritten or polluted by the files, thus hiding why we
-                    //got this permutation.
+                    // We need to dump the properties before processing the files, as these
+                    // may be overwritten or polluted by the files, thus hiding why we
+                    // got this permutation.
                     if( mDebugOutputProperties )
-                        dumpProperties( debugDumpFile );
+                        dumpProperties( debugDumpFile, tid );
                 }
 
-                //Library piece files first
-                LibraryVec::const_iterator itor = mLibrary.begin();
-                LibraryVec::const_iterator end  = mLibrary.end();
-
-                while( itor != end )
+                if( i == VertexShader )
                 {
-                    processPieces( itor->dataFolder, itor->pieceFiles[i] );
+                    const int32 customPieceName =
+                        getProperty( tid, HlmsBaseProp::_DatablockCustomPieceShaderName
+                                              [CustomPieceStage::PreVertexShader] );
+                    if( customPieceName )
+                        parseCustomPiece( customPieceName, tid );
+                }
+
+                // Library piece files first.
+                LibraryVec::const_iterator itor = mLibrary.begin();
+                LibraryVec::const_iterator endt = mLibrary.end();
+
+                while( itor != endt )
+                {
+                    processPieces( itor->dataFolder, itor->pieceFiles[i], tid );
                     ++itor;
                 }
 
-                //Main piece files
-                processPieces( mDataFolder, mPieceFiles[i] );
+                const CustomPieceStage::CustomPieceStage customPieceStage =
+                    CustomPieceStage::from( ShaderType( i ) );
+                const int32 customPieceName =
+                    getProperty( tid, HlmsBaseProp::_DatablockCustomPieceShaderName[customPieceStage] );
+                if( customPieceName )
+                    parseCustomPiece( customPieceName, tid );
 
-                //Generate the shader file.
+                // Main piece files
+                processPieces( mDataFolder, mPieceFiles[i], tid );
+
+                // Generate the shader file.
                 DataStreamPtr inFile = mDataFolder->open( filename );
 
                 String inString;
@@ -2247,153 +2684,195 @@ namespace Ogre
 
                 bool syntaxError = false;
 
-                syntaxError |= this->parseMath( inString, outString );
+                syntaxError |= this->parseMath( inString, outString, tid );
                 while( !syntaxError && outString.find( "@foreach" ) != String::npos )
                 {
-                    syntaxError |= this->parseForEach( outString, inString );
+                    syntaxError |= this->parseForEach( outString, inString, tid );
                     inString.swap( outString );
                 }
-                syntaxError |= this->parseProperties( outString, inString );
-                syntaxError |= this->parseUndefPieces( inString, outString );
-                while( !syntaxError  && (outString.find( "@piece" ) != String::npos ||
-                                         outString.find( "@insertpiece" ) != String::npos) )
+                syntaxError |= this->parseProperties( outString, inString, tid );
+                syntaxError |= this->parseUndefPieces( inString, outString, tid );
+                while( !syntaxError && ( outString.find( "@piece" ) != String::npos ||
+                                         outString.find( "@insertpiece" ) != String::npos ) )
                 {
-                    syntaxError |= this->collectPieces( outString, inString );
-                    syntaxError |= this->insertPieces( inString, outString );
+                    syntaxError |= this->collectPieces( outString, inString, tid );
+                    syntaxError |= this->insertPieces( inString, outString, tid );
                 }
-                syntaxError |= this->parseCounter( outString, inString );
+                syntaxError |= this->parseCounter( outString, inString, tid );
 
                 outString.swap( inString );
 
                 if( syntaxError )
                 {
                     LogManager::getSingleton().logMessage(
-                                "There were HLMS syntax errors while parsing "
-                                + StringConverter::toString( finalHash ) +
-                                ShaderFiles[i] );
+                        "There were HLMS syntax errors while parsing " +
+                        StringConverter::toString( uniqueName ) + ShaderFiles[i] );
                 }
 
-                //Now dump the processed file.
+                // Now dump the processed file.
                 if( mDebugOutput )
-                    debugDumpFile.write( &outString[0], outString.size() );
-
-                //Don't create and compile if template requested not to
-                if( !getProperty( HlmsBaseProp::DisableStage ) )
                 {
-                    codeCache.shaders[i] = compileShaderCode( outString, debugFilenameOutput,
-                                                              finalHash, static_cast<ShaderType>( i ) );
+                    debugDumpFile.write( &outString[0],
+                                         static_cast<std::streamsize>( outString.size() ) );
                 }
 
-                //Reset the disable flag.
-                setProperty( HlmsBaseProp::DisableStage, 0 );
+                // Don't create and compile if template requested not to
+                if( !getProperty( tid, HlmsBaseProp::DisableStage ) )
+                {
+                    codeCache.shaders[i] = compileShaderCode( outString, debugFilenameOutput, uniqueName,
+                                                              static_cast<ShaderType>( i ), tid );
+                }
+
+                // Reset the disable flag.
+                setProperty( tid, HlmsBaseProp::DisableStage, 0 );
             }
         }
 
+        ScopedLock lock( mMutex );
         mShaderCodeCache.push_back( codeCache );
+        mShaderCodeCacheDirty = true;
     }
     //-----------------------------------------------------------------------------------
-    const HlmsCache* Hlms::createShaderCacheEntry( uint32 renderableHash, const HlmsCache &passCache,
+    const HlmsCache *Hlms::createShaderCacheEntry( uint32 renderableHash, const HlmsCache &passCache,
                                                    uint32 finalHash,
-                                                   const QueuedRenderable &queuedRenderable )
+                                                   const QueuedRenderable &queuedRenderable,
+                                                   HlmsCache *reservedStubEntry, uint64 deadline,
+                                                   const size_t tid )
     {
         OgreProfileExhaustive( "Hlms::createShaderCacheEntry" );
 
-        //Set the properties by merging the cache from the pass, with the cache from renderable
-        mSetProperties.clear();
-        //If retVal is null, we did something wrong earlier
+        // Set the properties by merging the cache from the pass, with the cache from renderable
+        mT[tid].setProperties.clear();
+        // If retVal is null, we did something wrong earlier
         //(the cache should've been generated by now)
         const RenderableCache &renderableCache = getRenderableCache( renderableHash );
-        mSetProperties.reserve( passCache.setProperties.size() + renderableCache.setProperties.size() );
-        //Copy the properties from the renderable
-        mSetProperties.insert( mSetProperties.end(), renderableCache.setProperties.begin(),
-                                                     renderableCache.setProperties.end() );
+        mT[tid].setProperties.reserve( passCache.setProperties.size() +
+                                       renderableCache.setProperties.size() );
+        // Copy the properties from the renderable
+        mT[tid].setProperties.insert( mT[tid].setProperties.end(), renderableCache.setProperties.begin(),
+                                      renderableCache.setProperties.end() );
         {
-            //Now copy the properties from the pass (one by one, since be must maintain the order)
+            // Now copy the properties from the pass (one by one, since be must maintain the order)
             HlmsPropertyVec::const_iterator itor = passCache.setProperties.begin();
-            HlmsPropertyVec::const_iterator end  = passCache.setProperties.end();
+            HlmsPropertyVec::const_iterator endt = passCache.setProperties.end();
 
-            while( itor != end )
+            while( itor != endt )
             {
-                setProperty( itor->keyName, itor->value );
+                setProperty( tid, itor->keyName, itor->value );
                 ++itor;
             }
         }
 
-        mTextureNameStrings.clear();
-        for( size_t i=0; i<NumShaderTypes; ++i )
-            mTextureRegs[i].clear();
+        mT[tid].textureNameStrings.clear();
+        for( size_t i = 0; i < NumShaderTypes; ++i )
+            mT[tid].textureRegs[i].clear();
 
         {
-            //Add RenderSystem-specific properties
+            // Add RenderSystem-specific properties
             IdStringVec::const_iterator itor = mRsSpecificExtensions.begin();
-            IdStringVec::const_iterator end  = mRsSpecificExtensions.end();
+            IdStringVec::const_iterator endt = mRsSpecificExtensions.end();
 
-            while( itor != end )
-                setProperty( *itor++, 1 );
+            while( itor != endt )
+                setProperty( tid, *itor++, 1 );
         }
 
-        notifyPropertiesMergedPreGenerationStep();
-        mListener->propertiesMergedPreGenerationStep( this, passCache,
-                                                      renderableCache.setProperties,
-                                                      renderableCache.pieces,
-                                                      mSetProperties, queuedRenderable );
-
-        //Retrieve the shader code from the code cache
         ShaderCodeCache codeCache( renderableCache.pieces );
-        unsetProperty( HlmsPsoProp::Macroblock );
-        unsetProperty( HlmsPsoProp::Blendblock );
-        unsetProperty( HlmsPsoProp::InputLayoutId );
-        codeCache.mergedCache.setProperties.swap( mSetProperties );
+
+        const PropertiesMergeStatus status =
+            notifyPropertiesMergedPreGenerationStep( tid, codeCache.mergedCache.pieces );
+        if( status != PropertiesMergeStatusOk )
         {
-            ShaderCodeCacheVec::iterator itCodeCache = std::find( mShaderCodeCache.begin(),
-                                                                  mShaderCodeCache.end(), codeCache );
-            if( itCodeCache == mShaderCodeCache.end() )
-                compileShaderCode( codeCache );
+            const HlmsDatablock *datablock = queuedRenderable.renderable->getDatablock();
+            const String meshName =
+                SceneManager::deduceMovableObjectName( queuedRenderable.movableObject );
+
+            LogManager::getSingleton().logMessage(
+                "[tid = " + StringConverter::toString( tid ) + "] datablock '" +
+                *datablock->getNameStr() + "' from MovableObject '" + meshName +
+                "' has issues. See previous log entries matching the same tid." );
+
+            if( status == PropertiesMergeStatusError )
+            {
+                OGRE_EXCEPT( Exception::ERR_INVALID_STATE,
+                             "Errors encountered while generating shaders. See Ogre.log",
+                             "Hlms::createShaderCacheEntry" );
+            }
+        }
+        mListener->propertiesMergedPreGenerationStep( this, passCache, renderableCache.setProperties,
+                                                      renderableCache.pieces, mT[tid].setProperties,
+                                                      queuedRenderable, tid );
+
+        // Retrieve the shader code from the code cache
+        unsetProperty( tid, HlmsPsoProp::Macroblock );
+        unsetProperty( tid, HlmsPsoProp::Blendblock );
+        unsetProperty( tid, HlmsPsoProp::InputLayoutId );
+        codeCache.mergedCache.setProperties.swap( mT[tid].setProperties );
+        {
+            bool bIsInCache;
+
+            uint32_t shaderCounter = 0u;
+            {
+                ScopedLock lock( mMutex );
+                ShaderCodeCacheVec::iterator itCodeCache =
+                    std::find( mShaderCodeCache.begin(), mShaderCodeCache.end(), codeCache );
+                bIsInCache = itCodeCache != mShaderCodeCache.end();
+
+                if( bIsInCache )
+                {
+                    // This requires the mutex as itCodeCache could be invalidated
+                    for( size_t i = 0; i < NumShaderTypes; ++i )
+                        codeCache.shaders[i] = itCodeCache->shaders[i];
+                }
+                else
+                    shaderCounter = mShadersGenerated++;
+            }
+
+            if( !bIsInCache )
+                compileShaderCode( codeCache, shaderCounter, tid );
             else
             {
-                for( size_t i=0; i<NumShaderTypes; ++i )
-                    codeCache.shaders[i] = itCodeCache->shaders[i];
-                codeCache.mergedCache.setProperties.swap( mSetProperties );
+                // This can be done in parallel, as we've copied what itCodeCache needed
+                codeCache.mergedCache.setProperties.swap( mT[tid].setProperties );
             }
         }
 
         HlmsPso pso;
         pso.initialize();
-        pso.vertexShader                = codeCache.shaders[VertexShader];
-        pso.geometryShader              = codeCache.shaders[GeometryShader];
-        pso.tesselationHullShader       = codeCache.shaders[HullShader];
-        pso.tesselationDomainShader     = codeCache.shaders[DomainShader];
-        pso.pixelShader                 = codeCache.shaders[PixelShader];
+        pso.vertexShader = codeCache.shaders[VertexShader];
+        pso.geometryShader = codeCache.shaders[GeometryShader];
+        pso.tesselationHullShader = codeCache.shaders[HullShader];
+        pso.tesselationDomainShader = codeCache.shaders[DomainShader];
+        pso.pixelShader = codeCache.shaders[PixelShader];
 
-        bool casterPass = getProperty( HlmsBaseProp::ShadowCaster ) != 0;
+        bool casterPass = getProperty( tid, HlmsBaseProp::ShadowCaster ) != 0;
 
         const HlmsDatablock *datablock = queuedRenderable.renderable->getDatablock();
         pso.macroblock = datablock->getMacroblock( casterPass );
         pso.blendblock = datablock->getBlendblock( casterPass );
         pso.pass = passCache.pso.pass;
 
-        applyStrongMacroblockRules( pso );
+        applyStrongBlockRules( pso, tid );
 
-        const size_t numGlobalClipDistances = (size_t)getProperty( HlmsBaseProp::PsoClipDistances );
-        pso.clipDistances = (1u << numGlobalClipDistances) - 1u;
+        const size_t numGlobalClipDistances = (size_t)getProperty( tid, HlmsBaseProp::PsoClipDistances );
+        pso.clipDistances = static_cast<uint8>( ( 1u << numGlobalClipDistances ) - 1u );
 
-        //TODO: Configurable somehow (likely should be in datablock).
+        // TODO: Configurable somehow (likely should be in datablock).
         pso.sampleMask = 0xffffffff;
 
         if( queuedRenderable.renderable )
         {
             const VertexArrayObjectArray &vaos =
-                    queuedRenderable.renderable->getVaos( static_cast<VertexPass>(casterPass) );
+                queuedRenderable.renderable->getVaos( static_cast<VertexPass>( casterPass ) );
             if( !vaos.empty() )
             {
-                //v2 object. TODO: LOD? Should we allow Vaos with different vertex formats on LODs?
+                // v2 object. TODO: LOD? Should we allow Vaos with different vertex formats on LODs?
                 //(also the datablock hash in the renderable would have to account for that)
                 pso.operationType = vaos.front()->getOperationType();
                 pso.vertexElements = vaos.front()->getVertexDeclaration();
             }
             else
             {
-                //v1 object.
+                // v1 object.
                 v1::RenderOperation renderOp;
                 queuedRenderable.renderable->getRenderOperation( renderOp, casterPass );
                 pso.operationType = renderOp.operationType;
@@ -2403,32 +2882,108 @@ namespace Ogre
             pso.enablePrimitiveRestart = false;
         }
 
-        mRenderSystem->_hlmsPipelineStateObjectCreated( &pso );
+#if OGRE_DEBUG_MODE >= OGRE_DEBUG_MEDIUM
+        LogManager::getSingleton().logMessage(
+            "Compiling new PSO for datablock: " + datablock->getName().getFriendlyText(), LML_TRIVIAL );
+#endif
+        bool rsPsoCreated = mRenderSystem->_hlmsPipelineStateObjectCreated( &pso, deadline );
 
-        const HlmsCache* retVal = addShaderCache( finalHash, pso );
+        if( reservedStubEntry )
+        {
+            OGRE_ASSERT_LOW( !reservedStubEntry->pso.vertexShader &&
+                             !reservedStubEntry->pso.geometryShader &&
+                             !reservedStubEntry->pso.tesselationHullShader &&
+                             !reservedStubEntry->pso.tesselationDomainShader &&
+                             !reservedStubEntry->pso.pixelShader && "Race condition?" );
+            if( rsPsoCreated )
+                reservedStubEntry->pso = pso;
+            reservedStubEntry->flags =
+                !rsPsoCreated && reservedStubEntry->flags == HLMS_CACHE_FLAGS_COMPILATION_REQUESTED
+                    ? HLMS_CACHE_FLAGS_COMPILATION_REQUIRED  // recoverable error (timeout?), reschedule
+                    : HLMS_CACHE_FLAGS_NONE;
+        }
 
-        applyTextureRegisters( retVal );
+        const HlmsCache *retVal =
+            reservedStubEntry ? reservedStubEntry : addShaderCache( finalHash, pso );
+
+        applyTextureRegisters( retVal, tid );
 
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::notifyPropertiesMergedPreGenerationStep()
+    Hlms::PropertiesMergeStatus Hlms::notifyPropertiesMergedPreGenerationStep( const size_t tid,
+                                                                               PiecesMap *inOutPieces )
     {
+        if( getProperty( tid, HlmsBaseProp::AlphaToCoverage ) == HlmsBlendblock::A2cEnabledMsaaOnly )
+        {
+            if( getProperty( tid, HlmsBaseProp::MsaaSamples ) <= 1 )
+                setProperty( tid, HlmsBaseProp::AlphaToCoverage, 0 );
+        }
+
+        // Pass cache data cannot cache pieces, so it stored shadow maps' UV values as raw
+        // floating point in the properties. We can now turn it into pieces.
+        const int32 numShadowMapLights = getProperty( tid, HlmsBaseProp::NumShadowMapLights );
+
+        char tmpBuffer[64];
+        LwString propName( LwString::FromEmptyPointer( tmpBuffer, sizeof( tmpBuffer ) ) );
+
+        char tmpBuffer2[32];
+        LwString valueStr( LwString::FromEmptyPointer( tmpBuffer2, sizeof( tmpBuffer2 ) ) );
+
+        propName = "hlms_shadowmap";
+        const size_t basePropNameSize = propName.size();
+
+        for( int32 i = 0; i < numShadowMapLights; ++i )
+        {
+            propName.resize( basePropNameSize );
+            propName.a( i );  // hlms_shadowmap0
+
+            const size_t basePropSize = propName.size();
+
+            const uint32 kNumSuffixes = 6u;
+            const char *suffixes[kNumSuffixes] = { "_uv_min_x",    "_uv_min_y",  //
+                                                   "_uv_max_x",    "_uv_max_y",
+                                                   "_uv_length_x", "_uv_length_y" };
+
+            for( uint32 j = 0; j < kNumSuffixes; ++j )
+            {
+                propName.resize( basePropSize );
+                propName.a( suffixes[j] );
+
+                const IdString propNameHash = propName.c_str();
+
+                const int32_t value = getProperty( tid, propNameHash, -1 );
+                if( value != -1 )
+                {
+                    const float fValue = bit_cast<float>( value );
+
+                    valueStr.clear();
+                    valueStr.a( fValue );
+
+                    const PiecesMap::value_type v = { propNameHash, valueStr.c_str() };
+
+                    for( size_t k = 0u; k < NumShaderTypes; ++k )
+                        inOutPieces[k].insert( v );
+                }
+            }
+        }
+
+        return PropertiesMergeStatusOk;
     }
     //-----------------------------------------------------------------------------------
     uint16 Hlms::calculateHashForV1( Renderable *renderable )
     {
         v1::RenderOperation op;
-        //The Hlms uses the pass scene data to know whether this is a caster pass.
-        //We want to know all the details, so request for the non-caster RenderOp.
+        // The Hlms uses the pass scene data to know whether this is a caster pass.
+        // We want to know all the details, so request for the non-caster RenderOp.
         renderable->getRenderOperation( op, false );
         v1::VertexDeclaration *vertexDecl = op.vertexData->vertexDeclaration;
         const v1::VertexDeclaration::VertexElementList &elementList = vertexDecl->getElements();
         v1::VertexDeclaration::VertexElementList::const_iterator itor = elementList.begin();
-        v1::VertexDeclaration::VertexElementList::const_iterator end  = elementList.end();
+        v1::VertexDeclaration::VertexElementList::const_iterator endt = elementList.end();
 
         uint numTexCoords = 0;
-        while( itor != end )
+        while( itor != endt )
         {
             const v1::VertexElement &vertexElem = *itor;
             calculateHashForSemantic( vertexElem.getSemantic(), vertexElem.getType(),
@@ -2436,17 +2991,17 @@ namespace Ogre
             ++itor;
         }
 
-        //v1::VertexDeclaration doesn't hold opType information. We need to save it now.
-        //This means we do not allow LODs with different operation types or vertex layouts
+        // v1::VertexDeclaration doesn't hold opType information. We need to save it now.
+        // This means we do not allow LODs with different operation types or vertex layouts
         uint16 inputLayoutId = vertexDecl->_getInputLayoutId( mHlmsManager, op.operationType );
-        setProperty( HlmsPsoProp::InputLayoutId, inputLayoutId );
+        setProperty( kNoTid, HlmsPsoProp::InputLayoutId, inputLayoutId );
 
-        return numTexCoords;
+        return static_cast<uint16>( numTexCoords );
     }
     //-----------------------------------------------------------------------------------
     uint16 Hlms::calculateHashForV2( Renderable *renderable )
     {
-        //TODO: Account LOD
+        // TODO: Account LOD
         VertexArrayObject *vao = renderable->getVaos( VpNormal )[0];
         const VertexBufferPackedVec &vertexBuffers = vao->getVertexBuffers();
 
@@ -2454,28 +3009,28 @@ namespace Ogre
         uint16 semIndex[VES_COUNT];
         memset( semIndex, 0, sizeof( semIndex ) );
         VertexBufferPackedVec::const_iterator itor = vertexBuffers.begin();
-        VertexBufferPackedVec::const_iterator end  = vertexBuffers.end();
+        VertexBufferPackedVec::const_iterator endt = vertexBuffers.end();
 
-        while( itor != end )
+        while( itor != endt )
         {
-            const VertexElement2Vec &vertexElements = (*itor)->getVertexElements();
+            const VertexElement2Vec &vertexElements = ( *itor )->getVertexElements();
             VertexElement2Vec::const_iterator itElements = vertexElements.begin();
             VertexElement2Vec::const_iterator enElements = vertexElements.end();
 
             while( itElements != enElements )
             {
                 calculateHashForSemantic( itElements->mSemantic, itElements->mType,
-                                          semIndex[itElements->mSemantic-1]++, numTexCoords );
+                                          semIndex[itElements->mSemantic - 1]++, numTexCoords );
                 ++itElements;
             }
 
             ++itor;
         }
 
-        //We do not allow LODs with different operation types or vertex layouts
-        setProperty( HlmsPsoProp::InputLayoutId, vao->getInputLayoutId() );
+        // We do not allow LODs with different operation types or vertex layouts
+        setProperty( kNoTid, HlmsPsoProp::InputLayoutId, vao->getInputLayoutId() );
 
-        return numTexCoords;
+        return static_cast<uint16>( numTexCoords );
     }
     //-----------------------------------------------------------------------------------
     void Hlms::calculateHashForSemantic( VertexElementSemantic semantic, VertexElementType type,
@@ -2486,48 +3041,127 @@ namespace Ogre
         case VES_NORMAL:
             if( v1::VertexElement::getTypeCount( type ) < 4 )
             {
-                setProperty( HlmsBaseProp::Normal, 1 );
+                setProperty( kNoTid, HlmsBaseProp::Normal, 1 );
             }
             else
             {
-                setProperty( HlmsBaseProp::QTangent, 1 );
+                setProperty( kNoTid, HlmsBaseProp::QTangent, 1 );
             }
             break;
         case VES_TANGENT:
-            setProperty( HlmsBaseProp::Tangent, 1 );
-            if( v1::VertexElement::getTypeCount(type) == 4 )
+            setProperty( kNoTid, HlmsBaseProp::Tangent, 1 );
+            if( v1::VertexElement::getTypeCount( type ) == 4 )
             {
-                setProperty(HlmsBaseProp::Tangent4, 1);
+                setProperty( kNoTid, HlmsBaseProp::Tangent4, 1 );
             }
             break;
         case VES_DIFFUSE:
-            setProperty( HlmsBaseProp::Colour, 1 );
+            setProperty( kNoTid, HlmsBaseProp::Colour, 1 );
             break;
         case VES_TEXTURE_COORDINATES:
             inOutNumTexCoords = std::max<uint>( inOutNumTexCoords, index + 1 );
-            setProperty( *HlmsBaseProp::UvCountPtrs[index],
-                          v1::VertexElement::getTypeCount( type ) );
+            setProperty( kNoTid, *HlmsBaseProp::UvCountPtrs[index],
+                         v1::VertexElement::getTypeCount( type ) );
             break;
         case VES_BLEND_WEIGHTS:
-            setProperty( HlmsBaseProp::BonesPerVertex,
-                         v1::VertexElement::getTypeCount( type ) );
+            setProperty( kNoTid, HlmsBaseProp::BonesPerVertex, v1::VertexElement::getTypeCount( type ) );
             break;
         default:
             break;
         }
     }
     //-----------------------------------------------------------------------------------
+    void Hlms::setupSharedBasicProperties( Renderable *renderable, const bool bCasterPass )
+    {
+        HlmsDatablock *datablock = renderable->getDatablock();
+
+        for( size_t i = 0u; i < CustomPieceStage::NumCustomPieceStages; ++i )
+        {
+            const int32 filenameHashId = datablock->getCustomPieceFileIdHash(
+                static_cast<CustomPieceStage::CustomPieceStage>( i ) );
+            if( filenameHashId )
+                setProperty( kNoTid, HlmsBaseProp::_DatablockCustomPieceShaderName[i], filenameHashId );
+        }
+
+        {
+            const HlmsDatablock::CustomPropertyVec &customProperties = datablock->getCustomProperties();
+            for( const HlmsDatablock::CustomProperty &property : customProperties )
+                setProperty( kNoTid, property.keyName, property.value );
+        }
+
+        setProperty( kNoTid, HlmsBaseProp::AlphaTest, datablock->getAlphaTest() != CMPF_ALWAYS_PASS );
+        setProperty( kNoTid, HlmsBaseProp::AlphaTestShadowCasterOnly,
+                     datablock->getAlphaTestShadowCasterOnly() );
+        setProperty( kNoTid, HlmsBaseProp::AlphaBlend,
+                     datablock->getBlendblock( bCasterPass )->isAutoTransparent() );
+        setProperty( kNoTid, HlmsBaseProp::AlphaToCoverage,
+                     datablock->getBlendblock( bCasterPass )->mAlphaToCoverage );
+        if( datablock->getAlphaHashing() )
+            setProperty( kNoTid, HlmsBaseProp::AlphaHash, 1 );
+
+        if( renderable->getUseIdentityWorldMatrix() )
+            setProperty( kNoTid, HlmsBaseProp::IdentityWorld, 1 );
+
+        if( renderable->getParticleType() != ParticleType::NotParticle )
+        {
+            setProperty( kNoTid, HlmsBaseProp::ParticleSystem, 1 );
+            setProperty( kNoTid, HlmsBaseProp::VertexId, 1 );
+
+            IdString particleTypeName;
+            switch( renderable->getParticleType() )
+            {
+            case ParticleType::NotParticle:
+            case ParticleType::Point:
+                particleTypeName = HlmsBaseProp::ParticleTypePoint;
+                break;
+            case ParticleType::OrientedCommon:
+                particleTypeName = HlmsBaseProp::ParticleTypeOrientedCommon;
+                break;
+            case ParticleType::OrientedSelf:
+                particleTypeName = HlmsBaseProp::ParticleTypeOrientedSelf;
+                break;
+            case ParticleType::PerpendicularCommon:
+                particleTypeName = HlmsBaseProp::ParticleTypePerpendicularCommon;
+                break;
+            case ParticleType::PerpendicularSelf:
+                particleTypeName = HlmsBaseProp::ParticleTypePerpendicularSelf;
+                break;
+            }
+
+            setProperty( kNoTid, HlmsBaseProp::ParticleType,
+                         static_cast<int32>( particleTypeName.getU32Value() ) );
+            setProperty( kNoTid, particleTypeName,
+                         static_cast<int32>( particleTypeName.getU32Value() ) );
+
+            const ParticleSystemDef *systemDef = ParticleSystemDef::castFromRenderable( renderable );
+
+            setProperty( kNoTid, HlmsBaseProp::ParticleRotation,
+                         static_cast<int32>( systemDef->getRotationType() ) );
+
+            setProperty( kNoTid, HlmsBaseProp::Colour, 1 );
+
+            // The UVs are autogenerated so set UvCount0 to indicate it's available.
+            // However we don't set HlmsBaseProp::UvCount because it's autogenerated.
+            setProperty( kNoTid, HlmsBaseProp::UvCount0, 2 );
+        }
+
+        if( renderable->getUseIdentityViewProjMatrixIsDynamic() )
+            setProperty( kNoTid, HlmsBaseProp::IdentityViewProjDynamic, 1 );
+        else if( renderable->getUseIdentityProjection() )
+            setProperty( kNoTid, HlmsBaseProp::IdentityViewProj, 1 );
+    }
+    //-----------------------------------------------------------------------------------
     void Hlms::calculateHashFor( Renderable *renderable, uint32 &outHash, uint32 &outCasterHash )
     {
         OgreProfileExhaustive( "Hlms::calculateHashFor" );
 
-        mSetProperties.clear();
+        mT[kNoTid].setProperties.clear();
 
-        setProperty( HlmsBaseProp::Skeleton, renderable->hasSkeletonAnimation() );
+        setProperty( kNoTid, HlmsBaseProp::Skeleton, renderable->hasSkeletonAnimation() );
 
-        setProperty( HlmsBaseProp::Pose, renderable->getNumPoses() );
-        setProperty( HlmsBaseProp::PoseHalfPrecision, renderable->getPoseHalfPrecision() );
-        setProperty( HlmsBaseProp::PoseNormals, renderable->getPoseNormals() );
+        setProperty( kNoTid, HlmsBaseProp::Pose, renderable->getNumPoses() );
+        setProperty( kNoTid, HlmsBaseProp::PoseHalfPrecision, renderable->getPoseHalfPrecision() );
+        setProperty( kNoTid, HlmsBaseProp::PoseNormals, renderable->getPoseNormals() );
 
         uint16 numTexCoords = 0;
         if( renderable->getVaos( VpNormal ).empty() )
@@ -2535,64 +3169,51 @@ namespace Ogre
         else
             numTexCoords = calculateHashForV2( renderable );
 
-        setProperty( HlmsBaseProp::UvCount, numTexCoords );
+        setProperty( kNoTid, HlmsBaseProp::UvCount, numTexCoords );
+
+        setupSharedBasicProperties( renderable, false );
 
         HlmsDatablock *datablock = renderable->getDatablock();
 
-        setProperty( HlmsBaseProp::AlphaTest, datablock->getAlphaTest() != CMPF_ALWAYS_PASS );
-        setProperty( HlmsBaseProp::AlphaTestShadowCasterOnly, datablock->getAlphaTestShadowCasterOnly() );
-        setProperty( HlmsBaseProp::AlphaBlend, datablock->getBlendblock(false)->isAutoTransparent() );
-        setProperty( HlmsBaseProp::AlphaToCoverage, datablock->getBlendblock(false)->mAlphaToCoverageEnabled );
-
-        if( renderable->getUseIdentityWorldMatrix() )
-            setProperty( HlmsBaseProp::IdentityWorld, 1 );
-
-        if( renderable->getUseIdentityViewProjMatrixIsDynamic() )
-            setProperty( HlmsBaseProp::IdentityViewProjDynamic, 1 );
-        else if( renderable->getUseIdentityProjection() )
-            setProperty( HlmsBaseProp::IdentityViewProj, 1 );
-
-        setProperty( HlmsPsoProp::Macroblock,
-                     renderable->getDatablock()->getMacroblock(false)->mLifetimeId );
-        setProperty( HlmsPsoProp::Blendblock,
-                     renderable->getDatablock()->getBlendblock(false)->mLifetimeId );
+        setProperty( kNoTid, HlmsPsoProp::Macroblock, datablock->getMacroblock( false )->mLifetimeId );
+        setProperty( kNoTid, HlmsPsoProp::Blendblock, datablock->getBlendblock( false )->mLifetimeId );
 
         PiecesMap pieces[NumShaderTypes];
         if( datablock->getAlphaTest() != CMPF_ALWAYS_PASS )
         {
             pieces[PixelShader][HlmsBasePieces::AlphaTestCmpFunc] =
-                    HlmsDatablock::getCmpString( datablock->getAlphaTest() );
+                HlmsDatablock::getCmpString( datablock->getAlphaTest() );
         }
         calculateHashForPreCreate( renderable, pieces );
 
-        uint32 renderableHash = this->addRenderableCache( mSetProperties, pieces );
+        const uint32 renderableHash = this->addRenderableCache( mT[kNoTid].setProperties, pieces );
 
-        //For shadow casters, turn normals off. UVs & diffuse also off unless there's alpha testing.
-        setProperty( HlmsBaseProp::Normal, 0 );
-        setProperty( HlmsBaseProp::QTangent, 0 );
-        setProperty( HlmsBaseProp::AlphaBlend, datablock->getBlendblock(true)->isAutoTransparent() );
-        setProperty( HlmsBaseProp::AlphaToCoverage, datablock->getBlendblock(true)->mAlphaToCoverageEnabled );
+        // For shadow casters, turn normals off. UVs & diffuse also off unless there's alpha testing.
+        setProperty( kNoTid, HlmsBaseProp::Normal, 0 );
+        setProperty( kNoTid, HlmsBaseProp::QTangent, 0 );
+        setProperty( kNoTid, HlmsBaseProp::AlphaBlend,
+                     datablock->getBlendblock( true )->isAutoTransparent() );
+        setProperty( kNoTid, HlmsBaseProp::AlphaToCoverage,
+                     datablock->getBlendblock( true )->mAlphaToCoverage );
         PiecesMap piecesCaster[NumShaderTypes];
         if( datablock->getAlphaTest() != CMPF_ALWAYS_PASS )
         {
             piecesCaster[PixelShader][HlmsBasePieces::AlphaTestCmpFunc] =
-                    pieces[PixelShader][HlmsBasePieces::AlphaTestCmpFunc];
+                pieces[PixelShader][HlmsBasePieces::AlphaTestCmpFunc];
         }
         if( !renderable->getVaos( VpShadow ).empty() )
         {
-            //v2 objects can have an input layout that is different for shadow mapping
+            // v2 objects can have an input layout that is different for shadow mapping
             VertexArrayObject *vao = renderable->getVaos( VpShadow )[0];
-            setProperty( HlmsPsoProp::InputLayoutId, vao->getInputLayoutId() );
+            setProperty( kNoTid, HlmsPsoProp::InputLayoutId, vao->getInputLayoutId() );
         }
-        calculateHashForPreCaster( renderable, piecesCaster );
-        setProperty( HlmsPsoProp::Macroblock,
-                     renderable->getDatablock()->getMacroblock(true)->mLifetimeId );
-        setProperty( HlmsPsoProp::Blendblock,
-                     renderable->getDatablock()->getBlendblock(true)->mLifetimeId );
-        uint32 renderableCasterHash = this->addRenderableCache( mSetProperties, piecesCaster );
+        calculateHashForPreCaster( renderable, piecesCaster, pieces );
+        setProperty( kNoTid, HlmsPsoProp::Macroblock, datablock->getMacroblock( true )->mLifetimeId );
+        setProperty( kNoTid, HlmsPsoProp::Blendblock, datablock->getBlendblock( true )->mLifetimeId );
+        uint32 renderableCasterHash = this->addRenderableCache( mT[kNoTid].setProperties, piecesCaster );
 
-        outHash         = renderableHash;
-        outCasterHash   = renderableCasterHash;
+        outHash = renderableHash;
+        outCasterHash = renderableCasterHash;
     }
     //-----------------------------------------------------------------------------------
     void Hlms::analyzeBarriers( BarrierSolver &barrierSolver,
@@ -2604,7 +3225,7 @@ namespace Ogre
     HlmsCache Hlms::preparePassHash( const CompositorShadowNode *shadowNode, bool casterPass,
                                      bool dualParaboloid, SceneManager *sceneManager )
     {
-        mSetProperties.clear();
+        mT[kNoTid].setProperties.clear();
         return preparePassHashBase( shadowNode, casterPass, dualParaboloid, sceneManager );
     }
     //-----------------------------------------------------------------------------------
@@ -2612,150 +3233,174 @@ namespace Ogre
                                          bool dualParaboloid, SceneManager *sceneManager )
     {
         if( !mRenderSystem->isReverseDepth() )
-            setProperty( HlmsBaseProp::NoReverseDepth, 1 );
+            setProperty( kNoTid, HlmsBaseProp::NoReverseDepth, 1 );
+
+        const CompositorPass *pass = sceneManager->getCurrentCompositorPass();
+
+        bool bForceCullNone = false;
 
         if( !casterPass )
         {
             size_t numShadowMapLights = 0u;
             size_t numPssmSplits = 0;
+            bool useStaticBranchShadowMapLights = false;
 
             if( shadowNode )
             {
                 const vector<Real>::type *pssmSplits = shadowNode->getPssmSplits( 0 );
                 if( pssmSplits )
                     numPssmSplits = pssmSplits->size() - 1u;
-                setProperty( HlmsBaseProp::PssmSplits, static_cast<int32>( numPssmSplits ) );
+                setProperty( kNoTid, HlmsBaseProp::PssmSplits, static_cast<int32>( numPssmSplits ) );
 
                 bool isPssmBlend = false;
                 const vector<Real>::type *pssmBlends = shadowNode->getPssmBlends( 0 );
                 if( pssmBlends )
                     isPssmBlend = pssmBlends->size() > 0;
-                setProperty( HlmsBaseProp::PssmBlend, isPssmBlend );
+                setProperty( kNoTid, HlmsBaseProp::PssmBlend, isPssmBlend );
 
                 bool isPssmFade = false;
                 const Real *pssmFade = shadowNode->getPssmFade( 0 );
                 if( pssmFade )
                     isPssmFade = *pssmFade != 0.0f;
-                setProperty( HlmsBaseProp::PssmFade, isPssmFade );
+                setProperty( kNoTid, HlmsBaseProp::PssmFade, isPssmFade );
 
                 const TextureGpuVec &contiguousShadowMapTex = shadowNode->getContiguousShadowMapTex();
 
                 numShadowMapLights = shadowNode->getNumActiveShadowCastingLights();
                 if( numPssmSplits )
                     numShadowMapLights += numPssmSplits - 1u;
-                setProperty( HlmsBaseProp::NumShadowMapLights, numShadowMapLights );
-                setProperty( HlmsBaseProp::NumShadowMapTextures, contiguousShadowMapTex.size() );
+                setProperty( kNoTid, HlmsBaseProp::NumShadowMapLights,
+                             static_cast<int32>( numShadowMapLights ) );
+                setProperty( kNoTid, HlmsBaseProp::NumShadowMapTextures,
+                             static_cast<int32>( contiguousShadowMapTex.size() ) );
+
+                useStaticBranchShadowMapLights =
+                    mStaticBranchingLights && numShadowMapLights > numPssmSplits;
+                if( useStaticBranchShadowMapLights )
+                    setProperty( kNoTid, HlmsBaseProp::StaticBranchShadowMapLights, 1 );
+                mRealShadowMapPointLights = 0u;
+                mRealShadowMapSpotLights = 0u;
 
                 {
                     const Ogre::CompositorShadowNodeDef *shadowNodeDef = shadowNode->getDefinition();
 
                     char tmpBuffer[64];
-                    LwString propName( LwString::FromEmptyPointer( tmpBuffer, sizeof(tmpBuffer) ) );
+                    LwString propName( LwString::FromEmptyPointer( tmpBuffer, sizeof( tmpBuffer ) ) );
 
                     propName = "hlms_shadowmap";
                     const size_t basePropNameSize = propName.size();
 
-                    size_t shadowMapTexIdx = 0;
+                    uint32 shadowMapTexIdx = 0u;
 
-                    for( size_t i=0; i<numShadowMapLights; ++i )
+                    for( size_t i = 0; i < numShadowMapLights; ++i )
                     {
-                        //Skip inactive lights (e.g. no directional lights are available
-                        //and there's a shadow map that only accepts dir lights)
+                        // Skip inactive lights (e.g. no directional lights are available
+                        // and there's a shadow map that only accepts dir lights)
                         while( !shadowNode->isShadowMapIdxActive( shadowMapTexIdx ) )
                             ++shadowMapTexIdx;
 
                         const Ogre::ShadowTextureDefinition *shadowTexDef =
-                                shadowNodeDef->getShadowTextureDefinition( shadowMapTexIdx );
+                            shadowNodeDef->getShadowTextureDefinition( shadowMapTexIdx );
 
                         propName.resize( basePropNameSize );
-                        propName.a( (uint32)i ); //hlms_shadowmap0
+                        propName.a( (uint32)i );  // hlms_shadowmap0
 
                         const size_t basePropSize = propName.size();
 
-                        setProperty( propName.c_str(),
-                                     shadowNode->getIndexToContiguousShadowMapTex( shadowMapTexIdx ) );
+                        setProperty( kNoTid, propName.c_str(),
+                                     static_cast<int32>( shadowNode->getIndexToContiguousShadowMapTex(
+                                         shadowMapTexIdx ) ) );
 
-                        if( shadowTexDef->uvOffset != Vector2::ZERO ||
-                            shadowTexDef->uvLength != Vector2::UNIT_SCALE )
+                        if( ( shadowTexDef->uvOffset != Vector2::ZERO ||
+                              shadowTexDef->uvLength != Vector2::UNIT_SCALE ) ||
+                            useStaticBranchShadowMapLights )
                         {
                             propName.resize( basePropSize );
                             propName.a( "_uvs_fulltex" );
-                            setProperty( propName.c_str(), 1 );
+                            setProperty( kNoTid, propName.c_str(), 1 );
                         }
 
-                        float intPart, fractPart;
+                        propName.resize( basePropSize );
+                        propName.a( "_uv_min_x" );
+                        setProperty( kNoTid, propName.c_str(),
+                                     bit_cast<int32_t>( (float)shadowTexDef->uvOffset.x ) );
 
-                        fractPart = modff( (float)shadowTexDef->uvOffset.x, &intPart );
                         propName.resize( basePropSize );
-                        propName.a( "_uv_min_x_int" );
-                        setProperty( propName.c_str(), (int32)intPart );
-                        propName.resize( basePropSize );
-                        propName.a( "_uv_min_x_fract" );
-                        setProperty( propName.c_str(), (int32)(fractPart * 100000.0f) );
+                        propName.a( "_uv_min_y" );
+                        setProperty( kNoTid, propName.c_str(),
+                                     bit_cast<int32_t>( (float)shadowTexDef->uvOffset.y ) );
 
-                        fractPart = modff( (float)shadowTexDef->uvOffset.y, &intPart );
+                        const Vector2 uvMax = shadowTexDef->uvOffset + shadowTexDef->uvLength;
                         propName.resize( basePropSize );
-                        propName.a( "_uv_min_y_int" );
-                        setProperty( propName.c_str(), (int32)intPart );
-                        propName.resize( basePropSize );
-                        propName.a( "_uv_min_y_fract" );
-                        setProperty( propName.c_str(), (int32)(fractPart * 100000.0f) );
+                        propName.a( "_uv_max_x" );
+                        setProperty( kNoTid, propName.c_str(), bit_cast<int32_t>( (float)uvMax.x ) );
 
-                        Vector2 uvMax = shadowTexDef->uvOffset + shadowTexDef->uvLength;
-                        fractPart = modff( (float)uvMax.x, &intPart );
                         propName.resize( basePropSize );
-                        propName.a( "_uv_max_x_int" );
-                        setProperty( propName.c_str(), (int32)intPart );
-                        propName.resize( basePropSize );
-                        propName.a( "_uv_max_x_fract" );
-                        setProperty( propName.c_str(), (int32)(fractPart * 100000.0f) );
-
-                        fractPart = modff( (float)uvMax.y, &intPart );
-                        propName.resize( basePropSize );
-                        propName.a( "_uv_max_y_int" );
-                        setProperty( propName.c_str(), (int32)intPart );
-                        propName.resize( basePropSize );
-                        propName.a( "_uv_max_y_fract" );
-                        setProperty( propName.c_str(), (int32)(fractPart * 100000.0f) );
+                        propName.a( "_uv_max_y" );
+                        setProperty( kNoTid, propName.c_str(), bit_cast<int32_t>( (float)uvMax.y ) );
 
                         propName.resize( basePropSize );
                         propName.a( "_array_idx" );
-                        setProperty( propName.c_str(), shadowTexDef->arrayIdx );
+                        setProperty( kNoTid, propName.c_str(), shadowTexDef->arrayIdx );
 
                         const Light *light = shadowNode->getLightAssociatedWith( shadowMapTexIdx );
-                        if( light->getType() == Light::LT_DIRECTIONAL )
+                        if( useStaticBranchShadowMapLights )
                         {
                             propName.resize( basePropSize );
-                            propName.a( "_is_directional_light" );
-                            setProperty( propName.c_str(), 1 );
-                        }
-                        else if( light->getType() == Light::LT_POINT )
-                        {
-                            propName.resize( basePropSize );
-                            propName.a( "_is_point_light" );
-                            setProperty( propName.c_str(), 1 );
+                            propName.a( "_uv_length_x" );
+                            setProperty( kNoTid, propName.c_str(),
+                                         bit_cast<int32_t>( (float)shadowTexDef->uvLength.x ) );
 
-                            fractPart = modff( (float)shadowTexDef->uvLength.x, &intPart );
                             propName.resize( basePropSize );
-                            propName.a( "_uv_length_x_int" );
-                            setProperty( propName.c_str(), (int32)intPart );
-                            propName.resize( basePropSize );
-                            propName.a( "_uv_length_x_fract" );
-                            setProperty( propName.c_str(), (int32)(fractPart * 100000.0f) );
+                            propName.a( "_uv_length_y" );
+                            setProperty( kNoTid, propName.c_str(),
+                                         bit_cast<int32_t>( (float)shadowTexDef->uvLength.y ) );
 
-                            fractPart = modff( (float)shadowTexDef->uvLength.y, &intPart );
-                            propName.resize( basePropSize );
-                            propName.a( "_uv_length_y_int" );
-                            setProperty( propName.c_str(), (int32)intPart );
-                            propName.resize( basePropSize );
-                            propName.a( "_uv_length_y_fract" );
-                            setProperty( propName.c_str(), (int32)(fractPart * 100000.0f) );
+                            if( light->getType() == Light::LT_DIRECTIONAL )
+                            {
+                                propName.resize( basePropSize );
+                                propName.a( "_is_directional_light" );
+                                setProperty( kNoTid, propName.c_str(), 1 );
+                            }
+                            else if( light->getType() == Light::LT_POINT )
+                            {
+                                ++mRealShadowMapPointLights;
+                            }
+                            else if( light->getType() == Light::LT_SPOTLIGHT )
+                            {
+                                ++mRealShadowMapSpotLights;
+                            }
                         }
-                        else if( light->getType() == Light::LT_SPOTLIGHT )
+                        else
                         {
-                            propName.resize( basePropSize );
-                            propName.a( "_is_spot" );
-                            setProperty( propName.c_str(), 1 );
+                            if( light->getType() == Light::LT_DIRECTIONAL )
+                            {
+                                propName.resize( basePropSize );
+                                propName.a( "_is_directional_light" );
+                                setProperty( kNoTid, propName.c_str(), 1 );
+                            }
+                            else if( light->getType() == Light::LT_POINT )
+                            {
+                                propName.resize( basePropSize );
+                                propName.a( "_is_point_light" );
+                                setProperty( kNoTid, propName.c_str(), 1 );
+
+                                propName.resize( basePropSize );
+                                propName.a( "_uv_length_x" );
+                                setProperty( kNoTid, propName.c_str(),
+                                             bit_cast<int32_t>( (float)shadowTexDef->uvLength.x ) );
+
+                                propName.resize( basePropSize );
+                                propName.a( "_uv_length_y" );
+                                setProperty( kNoTid, propName.c_str(),
+                                             bit_cast<int32_t>( (float)shadowTexDef->uvLength.y ) );
+                            }
+                            else if( light->getType() == Light::LT_SPOTLIGHT )
+                            {
+                                propName.resize( basePropSize );
+                                propName.a( "_is_spot" );
+                                setProperty( kNoTid, propName.c_str(), 1 );
+                            }
                         }
 
                         ++shadowMapTexIdx;
@@ -2765,7 +3410,7 @@ namespace Ogre
                 int usesDepthTextures = -1;
 
                 const size_t numShadowMapTextures = contiguousShadowMapTex.size();
-                for( size_t i=0; i<numShadowMapTextures; ++i )
+                for( size_t i = 0; i < numShadowMapTextures; ++i )
                 {
                     bool missmatch = false;
 
@@ -2786,7 +3431,8 @@ namespace Ogre
                                      "Mixing depth textures with non-depth textures for "
                                      "shadow mapping is not supported. Either all of "
                                      "them are depth textures, or none of them are.\n"
-                                     "Shadow Node: '" + shadowNode->getName().getFriendlyText() + "'",
+                                     "Shadow Node: '" +
+                                         shadowNode->getName().getFriendlyText() + "'",
                                      "Hlms::preparePassHash" );
                     }
                 }
@@ -2794,60 +3440,61 @@ namespace Ogre
                 if( usesDepthTextures == -1 )
                     usesDepthTextures = 0;
 
-                setProperty( HlmsBaseProp::ShadowUsesDepthTexture, usesDepthTextures );
+                setProperty( kNoTid, HlmsBaseProp::ShadowUsesDepthTexture, usesDepthTextures );
             }
-
-            const CompositorPass *pass = sceneManager->getCurrentCompositorPass();
 
             if( pass && pass->getType() == PASS_SCENE )
             {
-                OGRE_ASSERT_HIGH( dynamic_cast<const CompositorPassSceneDef*>( pass->getDefinition() ) );
+                OGRE_ASSERT_HIGH(
+                    dynamic_cast<const CompositorPassSceneDef *>( pass->getDefinition() ) );
                 const CompositorPassSceneDef *passSceneDef =
-                        static_cast<const CompositorPassSceneDef*>( pass->getDefinition() );
+                    static_cast<const CompositorPassSceneDef *>( pass->getDefinition() );
                 if( passSceneDef->mUvBakingSet != 0xFF )
                 {
-                    setProperty( HlmsBaseProp::UseUvBaking, 1 );
-                    setProperty( HlmsBaseProp::UvBaking, passSceneDef->mUvBakingSet );
+                    bForceCullNone = true;
+                    setProperty( kNoTid, HlmsBaseProp::UseUvBaking, 1 );
+                    setProperty( kNoTid, HlmsBaseProp::UvBaking, passSceneDef->mUvBakingSet );
                     if( passSceneDef->mBakeLightingOnly )
-                        setProperty( HlmsBaseProp::BakeLightingOnly, 1 );
+                        setProperty( kNoTid, HlmsBaseProp::BakeLightingOnly, 1 );
                 }
 
                 if( passSceneDef->mInstancedStereo )
-                    setProperty( HlmsBaseProp::InstancedStereo, 1 );
+                    setProperty( kNoTid, HlmsBaseProp::InstancedStereo, 1 );
 
                 if( passSceneDef->mGenNormalsGBuf )
-                    setProperty( HlmsBaseProp::GenNormalsGBuf, 1 );
+                    setProperty( kNoTid, HlmsBaseProp::GenNormalsGBuf, 1 );
             }
 
             ForwardPlusBase *forwardPlus = sceneManager->_getActivePassForwardPlus();
             if( forwardPlus )
-                forwardPlus->setHlmsPassProperties( this );
+                forwardPlus->setHlmsPassProperties( kNoTid, this );
 
             if( mShaderFileExt == ".glsl" )
             {
-                //Actually the problem is not texture flipping, but origin. In D3D11,
-                //we need to always flip because origin is different, but it's consistent
-                //between texture and render window. In GL, RenderWindows don't need
-                //to flip, but textures do.
+                // Actually the problem is not texture flipping, but origin. In D3D11,
+                // we need to always flip because origin is different, but it's consistent
+                // between texture and render window. In GL, RenderWindows don't need
+                // to flip, but textures do.
                 const RenderPassDescriptor *renderPassDesc = mRenderSystem->getCurrentPassDescriptor();
-                setProperty( HlmsBaseProp::ForwardPlusFlipY, renderPassDesc->requiresTextureFlipping() );
+                setProperty( kNoTid, HlmsBaseProp::ForwardPlusFlipY,
+                             renderPassDesc->requiresTextureFlipping() );
             }
 
-            uint numLightsPerType[Light::NUM_LIGHT_TYPES];
+            int32 numLightsPerType[Light::NUM_LIGHT_TYPES];
             int32 numAreaApproxLightsWithMask = 0;
             memset( numLightsPerType, 0, sizeof( numLightsPerType ) );
 
-            uint shadowCasterDirectional = 0;
+            int32 shadowCasterDirectional = 0;
 
             if( mLightGatheringMode == LightGatherForwardPlus )
             {
                 if( shadowNode )
                 {
-                    //Gather shadow casting lights, regardless of their type.
+                    // Gather shadow casting lights, regardless of their type.
                     const LightClosestArray &lights = shadowNode->getShadowCastingLights();
                     LightClosestArray::const_iterator itor = lights.begin();
-                    LightClosestArray::const_iterator end  = lights.end();
-                    while( itor != end )
+                    LightClosestArray::const_iterator endt = lights.end();
+                    while( itor != endt )
                     {
                         if( itor->light )
                         {
@@ -2859,59 +3506,60 @@ namespace Ogre
                     }
                 }
 
-                //Always gather directional & area lights.
+                // Always gather directional & area lights.
                 numLightsPerType[Light::LT_DIRECTIONAL] = 0;
                 numLightsPerType[Light::LT_AREA_APPROX] = 0;
                 numLightsPerType[Light::LT_AREA_LTC] = 0;
                 {
                     mAreaLightsGlobalLightListStart = std::numeric_limits<uint32>::max();
                     const LightListInfo &globalLightList = sceneManager->getGlobalLightList();
-                    LightArray::const_iterator begin= globalLightList.lights.begin();
+                    LightArray::const_iterator begin = globalLightList.lights.begin();
                     LightArray::const_iterator itor = begin;
-                    LightArray::const_iterator end  = globalLightList.lights.end();
+                    LightArray::const_iterator endt = globalLightList.lights.end();
 
-                    while( itor != end )
+                    while( itor != endt )
                     {
-                        const Light::LightTypes lightType = (*itor)->getType();
+                        const Light::LightTypes lightType = ( *itor )->getType();
                         if( lightType == Light::LT_DIRECTIONAL )
                             ++numLightsPerType[Light::LT_DIRECTIONAL];
                         else if( lightType == Light::LT_AREA_APPROX )
                         {
-                            mAreaLightsGlobalLightListStart =
-                                    std::min<uint32>( mAreaLightsGlobalLightListStart, itor - begin );
+                            mAreaLightsGlobalLightListStart = std::min<uint32>(
+                                mAreaLightsGlobalLightListStart, static_cast<uint32>( itor - begin ) );
                             ++numLightsPerType[Light::LT_AREA_APPROX];
-                            if( (*itor)->mTextureLightMaskIdx != std::numeric_limits<uint16>::max() )
+                            if( ( *itor )->mTextureLightMaskIdx != std::numeric_limits<uint16>::max() )
                                 ++numAreaApproxLightsWithMask;
                         }
                         else if( lightType == Light::LT_AREA_LTC )
                         {
-                            mAreaLightsGlobalLightListStart =
-                                    std::min<uint32>( mAreaLightsGlobalLightListStart, itor - begin );
+                            mAreaLightsGlobalLightListStart = std::min<uint32>(
+                                mAreaLightsGlobalLightListStart, static_cast<uint32>( itor - begin ) );
                             ++numLightsPerType[Light::LT_AREA_LTC];
                         }
                         ++itor;
                     }
                 }
 
-                mRealNumDirectionalLights = numLightsPerType[Light::LT_DIRECTIONAL];
+                mRealNumDirectionalLights =
+                    static_cast<uint32>( numLightsPerType[Light::LT_DIRECTIONAL] );
 
                 if( mNumLightsLimit > 0 &&
                     numLightsPerType[Light::LT_DIRECTIONAL] > shadowCasterDirectional )
                 {
                     numLightsPerType[Light::LT_DIRECTIONAL] = shadowCasterDirectional + mNumLightsLimit;
 
-                    setProperty( HlmsBaseProp::StaticBranchLights, 1 );
+                    setProperty( kNoTid, HlmsBaseProp::StaticBranchLights, 1 );
                 }
             }
             else if( mLightGatheringMode == LightGatherForward )
             {
                 if( shadowNode )
                 {
-                    //Gather shadow casting *directional* lights.
+                    // Gather shadow casting *directional* lights.
                     const LightClosestArray &lights = shadowNode->getShadowCastingLights();
                     LightClosestArray::const_iterator itor = lights.begin();
-                    LightClosestArray::const_iterator end  = lights.end();
-                    while( itor != end )
+                    LightClosestArray::const_iterator endt = lights.end();
+                    while( itor != endt )
                     {
                         if( itor->light && itor->light->getType() == Light::LT_DIRECTIONAL )
                             ++shadowCasterDirectional;
@@ -2919,67 +3567,65 @@ namespace Ogre
                     }
                 }
 
-                //Gather all lights.
+                // Gather all lights.
                 const LightListInfo &globalLightList = sceneManager->getGlobalLightList();
                 LightArray::const_iterator itor = globalLightList.lights.begin();
-                LightArray::const_iterator end  = globalLightList.lights.end();
+                LightArray::const_iterator endt = globalLightList.lights.end();
 
                 size_t numTotalLights = 0;
 
-                while( itor != end && numTotalLights < mNumLightsLimit )
+                while( itor != endt && numTotalLights < mNumLightsLimit )
                 {
-                    ++numLightsPerType[(*itor)->getType()];
+                    ++numLightsPerType[( *itor )->getType()];
                     ++numTotalLights;
                     ++itor;
                 }
             }
 
-            setProperty( HlmsBaseProp::LightsAttenuation, numLightsPerType[Light::LT_POINT] +
-                                                          numLightsPerType[Light::LT_SPOTLIGHT] );
-            setProperty( HlmsBaseProp::LightsSpotParams,  numLightsPerType[Light::LT_SPOTLIGHT] );
-
-            if( numLightsPerType[Light::LT_POINT] &&         //
-                !numLightsPerType[Light::LT_DIRECTIONAL] &&  //
+            if( !useStaticBranchShadowMapLights && numLightsPerType[Light::LT_POINT] &&  //
+                !numLightsPerType[Light::LT_DIRECTIONAL] &&                              //
                 !numLightsPerType[Light::LT_SPOTLIGHT] )
             {
-                setProperty( HlmsBaseProp::AllPointLights, 1 );
+                setProperty( kNoTid, HlmsBaseProp::AllPointLights, 1 );
             }
 
-            numLightsPerType[Light::LT_POINT]       += numLightsPerType[Light::LT_DIRECTIONAL];
-            numLightsPerType[Light::LT_SPOTLIGHT]   += numLightsPerType[Light::LT_POINT];
+            numLightsPerType[Light::LT_POINT] += numLightsPerType[Light::LT_DIRECTIONAL];
+            numLightsPerType[Light::LT_SPOTLIGHT] += numLightsPerType[Light::LT_POINT];
 
-            //We need to limit the number of area lights before and after rounding
+            // We need to limit the number of area lights before and after rounding
             {
-                //Approx area lights
-                numLightsPerType[Light::LT_AREA_APPROX] =
-                        std::min<uint16>( numLightsPerType[Light::LT_AREA_APPROX],
-                                          mNumAreaApproxLightsLimit );
-                mRealNumAreaApproxLights = numLightsPerType[Light::LT_AREA_APPROX];
-                mRealNumAreaApproxLightsWithMask = numAreaApproxLightsWithMask;
-                numLightsPerType[Light::LT_AREA_APPROX] =
-                        std::min<uint16>( numLightsPerType[Light::LT_AREA_APPROX],
-                                          mNumAreaApproxLightsLimit );
+                // Approx area lights
+                numLightsPerType[Light::LT_AREA_APPROX] = std::min<int32>(
+                    numLightsPerType[Light::LT_AREA_APPROX], mNumAreaApproxLightsLimit );
+                mRealNumAreaApproxLights =
+                    static_cast<uint32>( numLightsPerType[Light::LT_AREA_APPROX] );
+                mRealNumAreaApproxLightsWithMask = static_cast<uint32>( numAreaApproxLightsWithMask );
+                numLightsPerType[Light::LT_AREA_APPROX] = std::min<int32>(
+                    numLightsPerType[Light::LT_AREA_APPROX], mNumAreaApproxLightsLimit );
             }
             {
-                //LTC area lights
+                // LTC area lights
                 numLightsPerType[Light::LT_AREA_LTC] =
-                        std::min<uint16>( numLightsPerType[Light::LT_AREA_LTC], mNumAreaLtcLightsLimit );
-                mRealNumAreaLtcLights = numLightsPerType[Light::LT_AREA_LTC];
+                    std::min<int32>( numLightsPerType[Light::LT_AREA_LTC], mNumAreaLtcLightsLimit );
+                mRealNumAreaLtcLights = static_cast<uint32>( numLightsPerType[Light::LT_AREA_LTC] );
                 numLightsPerType[Light::LT_AREA_LTC] =
-                        std::min<uint16>( numLightsPerType[Light::LT_AREA_LTC], mNumAreaLtcLightsLimit );
+                    std::min<int32>( numLightsPerType[Light::LT_AREA_LTC], mNumAreaLtcLightsLimit );
             }
 
-            //The value is cummulative for each type (order: Directional, point, spot)
-            setProperty( HlmsBaseProp::LightsDirectional, shadowCasterDirectional );
-            setProperty( HlmsBaseProp::LightsDirNonCaster,numLightsPerType[Light::LT_DIRECTIONAL] );
-            setProperty( HlmsBaseProp::LightsPoint,       numLightsPerType[Light::LT_POINT] );
-            setProperty( HlmsBaseProp::LightsSpot,        numLightsPerType[Light::LT_SPOTLIGHT] );
+            // The value is cummulative for each type (order: Directional, point, spot)
+            setProperty( kNoTid, HlmsBaseProp::LightsDirectional, shadowCasterDirectional );
+            setProperty( kNoTid, HlmsBaseProp::LightsDirNonCaster,
+                         numLightsPerType[Light::LT_DIRECTIONAL] );
+            setProperty( kNoTid, HlmsBaseProp::LightsPoint, numLightsPerType[Light::LT_POINT] );
+            setProperty( kNoTid, HlmsBaseProp::LightsSpot, numLightsPerType[Light::LT_SPOTLIGHT] );
             if( numLightsPerType[Light::LT_AREA_APPROX] > 0 )
-                setProperty( HlmsBaseProp::LightsAreaApprox, mNumAreaApproxLightsLimit );
+            {
+                setProperty( kNoTid, HlmsBaseProp::LightsAreaApprox, mNumAreaApproxLightsLimit );
+            }
             if( numLightsPerType[Light::LT_AREA_LTC] > 0 )
-                setProperty( HlmsBaseProp::LightsAreaLtc, mNumAreaLtcLightsLimit );
+                setProperty( kNoTid, HlmsBaseProp::LightsAreaLtc, mNumAreaLtcLightsLimit );
             if( numAreaApproxLightsWithMask > 0 )
-                setProperty( HlmsBaseProp::LightsAreaTexMask, 1 );
+                setProperty( kNoTid, HlmsBaseProp::LightsAreaTexMask, 1 );
 
             if( shadowNode )
             {
@@ -3000,13 +3646,13 @@ namespace Ogre
                     // Deal with first directional light (which may be PSSM)
                     size_t numFirstDirSplits = numPssmSplits;
                     if( numFirstDirSplits == 0u )
-                        numFirstDirSplits = shadowCasterDirectional > 0u ? 1u : 0u;
+                        numFirstDirSplits = shadowCasterDirectional > 0 ? 1 : 0;
 
                     for( size_t i = 0u; i < numFirstDirSplits; ++i )
                     {
                         propName.resize( basePropNameSize );
                         propName.a( shadowMapIdx, "_light_idx" );  // hlms_shadowmap0_light_idx
-                        setProperty( propName.c_str(), shadowMapLightIdx );
+                        setProperty( kNoTid, propName.c_str(), shadowMapLightIdx );
                         ++shadowMapIdx;
                     }
 
@@ -3015,116 +3661,129 @@ namespace Ogre
                 }
                 {
                     // Deal with rest of caster directional lights
-                    for( size_t i = 1u; i < shadowCasterDirectional; ++i )
+                    for( int32 i = 1; i < shadowCasterDirectional; ++i )
                     {
                         propName.resize( basePropNameSize );
                         propName.a( shadowMapIdx, "_light_idx" );  // hlms_shadowmap0_light_idx
-                        setProperty( propName.c_str(), shadowMapLightIdx );
+                        setProperty( kNoTid, propName.c_str(), shadowMapLightIdx );
                         ++shadowMapIdx;
                         ++shadowMapLightIdx;
                     }
                 }
 
-                // Deal with rest of non-caster directional lights
-                shadowMapLightIdx += numLightsPerType[Light::LT_DIRECTIONAL] - shadowCasterDirectional;
-
-                // Deal with the rest of the casting lights (point & spot)
-                const size_t numLights = numLightsPerType[Light::LT_SPOTLIGHT];
-                for( size_t i = numLightsPerType[Light::LT_DIRECTIONAL]; i < numLights; ++i )
+                if( useStaticBranchShadowMapLights )
                 {
-                    propName.resize( basePropNameSize );
-                    propName.a( shadowMapIdx, "_light_idx" );  // hlms_shadowmap0_light_idx
-                    setProperty( propName.c_str(), shadowMapLightIdx );
-                    ++shadowMapIdx;
-                    ++shadowMapLightIdx;
+                    setProperty( kNoTid, HlmsBaseProp::LightsPoint, 0 );
+                }
+                else
+                {
+                    // Deal with rest of non-caster directional lights
+                    shadowMapLightIdx +=
+                        numLightsPerType[Light::LT_DIRECTIONAL] - shadowCasterDirectional;
+
+                    // Deal with the rest of the casting lights (point & spot)
+                    const int32 numLights = numLightsPerType[Light::LT_SPOTLIGHT];
+                    for( int32 i = numLightsPerType[Light::LT_DIRECTIONAL]; i < numLights; ++i )
+                    {
+                        propName.resize( basePropNameSize );
+                        propName.a( shadowMapIdx, "_light_idx" );  // hlms_shadowmap0_light_idx
+                        setProperty( kNoTid, propName.c_str(), shadowMapLightIdx );
+                        ++shadowMapIdx;
+                        ++shadowMapLightIdx;
+                    }
                 }
             }
         }
         else
         {
-            setProperty( HlmsBaseProp::ShadowCaster, 1 );
-
-            const CompositorPass *pass = sceneManager->getCurrentCompositorPass();
+            setProperty( kNoTid, HlmsBaseProp::ShadowCaster, 1 );
 
             if( pass )
             {
-                const uint8 shadowMapIdx = pass->getDefinition()->mShadowMapIdx;
+                const uint32 shadowMapIdx = pass->getDefinition()->mShadowMapIdx;
                 const Light *light = shadowNode->getLightAssociatedWith( shadowMapIdx );
                 if( light->getType() == Light::LT_DIRECTIONAL )
-                    setProperty( HlmsBaseProp::ShadowCasterDirectional, 1 );
+                    setProperty( kNoTid, HlmsBaseProp::ShadowCasterDirectional, 1 );
                 else if( light->getType() == Light::LT_POINT )
-                    setProperty( HlmsBaseProp::ShadowCasterPoint, 1 );
+                    setProperty( kNoTid, HlmsBaseProp::ShadowCasterPoint, 1 );
             }
 
-            setProperty( HlmsBaseProp::DualParaboloidMapping, dualParaboloid );
+            setProperty( kNoTid, HlmsBaseProp::DualParaboloidMapping, dualParaboloid );
 
-            setProperty( HlmsBaseProp::Forward3D,         0 );
-            setProperty( HlmsBaseProp::NumShadowMapLights,0 );
-            setProperty( HlmsBaseProp::NumShadowMapTextures, 0 );
-            setProperty( HlmsBaseProp::PssmSplits, 0 );
-            setProperty( HlmsBaseProp::LightsAttenuation, 0 );
-            setProperty( HlmsBaseProp::LightsSpotParams,  0 );
-            setProperty( HlmsBaseProp::LightsDirectional, 0 );
-            setProperty( HlmsBaseProp::LightsDirNonCaster,0 );
-            setProperty( HlmsBaseProp::LightsPoint,       0 );
-            setProperty( HlmsBaseProp::LightsSpot,        0 );
-            setProperty( HlmsBaseProp::LightsAreaApprox,  0 );
+            setProperty( kNoTid, HlmsBaseProp::Forward3D, 0 );
+            setProperty( kNoTid, HlmsBaseProp::NumShadowMapLights, 0 );
+            setProperty( kNoTid, HlmsBaseProp::NumShadowMapTextures, 0 );
+            setProperty( kNoTid, HlmsBaseProp::PssmSplits, 0 );
+            setProperty( kNoTid, HlmsBaseProp::LightsDirectional, 0 );
+            setProperty( kNoTid, HlmsBaseProp::LightsDirNonCaster, 0 );
+            setProperty( kNoTid, HlmsBaseProp::LightsPoint, 0 );
+            setProperty( kNoTid, HlmsBaseProp::LightsSpot, 0 );
+            setProperty( kNoTid, HlmsBaseProp::LightsAreaApprox, 0 );
 
             const RenderPassDescriptor *renderPassDesc = mRenderSystem->getCurrentPassDescriptor();
 
-            setProperty( HlmsBaseProp::ShadowUsesDepthTexture,
-                         (renderPassDesc->getNumColourEntries() > 0) ? 0 : 1 );
+            setProperty( kNoTid, HlmsBaseProp::ShadowUsesDepthTexture,
+                         ( renderPassDesc->getNumColourEntries() > 0 ) ? 0 : 1 );
         }
 
         const Camera *camera = sceneManager->getCamerasInProgress().renderingCamera;
         if( camera && camera->isReflected() )
         {
-            setProperty( HlmsBaseProp::PsoClipDistances, 1 );
-            setProperty( HlmsBaseProp::GlobalClipPlanes, 1 );
+            setProperty( kNoTid, HlmsBaseProp::PsoClipDistances, 1 );
+            setProperty( kNoTid, HlmsBaseProp::GlobalClipPlanes, 1 );
+            // some Android devices(e.g. Mali-G77, Google Pixel 7 Pro) do not support user clip planes
+            if( !mRenderSystem->getCapabilities()->hasCapability( RSC_USER_CLIP_PLANES ) )
+                setProperty( kNoTid, HlmsBaseProp::EmulateClipDistances, 1 );
         }
 
         const RenderPassDescriptor *renderPassDesc = mRenderSystem->getCurrentPassDescriptor();
-        setProperty( HlmsBaseProp::RenderDepthOnly,
-                     (renderPassDesc->getNumColourEntries() > 0) ? 0 : 1 );
+        setProperty( kNoTid, HlmsBaseProp::RenderDepthOnly,
+                     ( renderPassDesc->getNumColourEntries() > 0 ) ? 0 : 1 );
 
         if( sceneManager->getCurrentPrePassMode() == PrePassCreate )
         {
-            setProperty( HlmsBaseProp::PrePass, 1 );
-            setProperty( HlmsBaseProp::GenNormalsGBuf, 1 );
+            setProperty( kNoTid, HlmsBaseProp::PrePass, 1 );
+            setProperty( kNoTid, HlmsBaseProp::GenNormalsGBuf, 1 );
         }
         else if( sceneManager->getCurrentPrePassMode() == PrePassUse )
         {
-            setProperty( HlmsBaseProp::UsePrePass, 1 );
-            setProperty( HlmsBaseProp::VPos, 1 );
+            setProperty( kNoTid, HlmsBaseProp::UsePrePass, 1 );
+            setProperty( kNoTid, HlmsBaseProp::VPos, 1 );
 
-            setProperty( HlmsBaseProp::ScreenPosInt, 1 );
+            setProperty( kNoTid, HlmsBaseProp::ScreenPosInt, 1 );
 
             {
                 const TextureGpuVec &prePassTextures = sceneManager->getCurrentPrePassTextures();
                 assert( !prePassTextures.empty() );
                 if( prePassTextures[0]->isMultisample() )
                 {
-                    setProperty( HlmsBaseProp::UsePrePassMsaa,
+                    setProperty( kNoTid, HlmsBaseProp::UsePrePassMsaa,
                                  prePassTextures[0]->getSampleDescription().getColourSamples() );
                 }
             }
 
             if( sceneManager->getCurrentSsrTexture() != 0 )
-                setProperty( HlmsBaseProp::UseSsr, 1 );
+                setProperty( kNoTid, HlmsBaseProp::UseSsr, 1 );
+        }
+
+        if( pass && pass->getAnyTargetTexture() )
+        {
+            setProperty( kNoTid, HlmsBaseProp::MsaaSamples,
+                         pass->getAnyTargetTexture()->getSampleDescription().getColourSamples() );
         }
 
         if( sceneManager->getCurrentRefractionsTexture() != 0 )
         {
-            setProperty( HlmsBaseProp::VPos, 1 );
-            setProperty( HlmsBaseProp::ScreenPosInt, 1 );
-            setProperty( HlmsBaseProp::SsRefractionsAvailable, 1 );
+            setProperty( kNoTid, HlmsBaseProp::VPos, 1 );
+            setProperty( kNoTid, HlmsBaseProp::ScreenPosInt, 1 );
+            setProperty( kNoTid, HlmsBaseProp::SsRefractionsAvailable, 1 );
         }
 
         mListener->preparePassHash( shadowNode, casterPass, dualParaboloid, sceneManager, this );
 
         PassCache passCache;
-        passCache.passPso = getPassPsoForScene( sceneManager );
-        passCache.properties = mSetProperties;
+        passCache.passPso = getPassPsoForScene( sceneManager, bForceCullNone );
+        passCache.properties = mT[kNoTid].setProperties;
 
         assert( mPassCache.size() <= HlmsBits::PassMask &&
                 "Too many passes combinations, we'll overflow the bits assigned in the hash!" );
@@ -3135,34 +3794,37 @@ namespace Ogre
             it = mPassCache.end() - 1;
         }
 
-        const uint32 hash = (it - mPassCache.begin()) << HlmsBits::PassShift;
+        const uint32 hash = static_cast<uint32>( it - mPassCache.begin() ) << HlmsBits::PassShift;
 
-        HlmsCache retVal( hash, mType, HlmsPso() );
-        retVal.setProperties = mSetProperties;
+        HlmsCache retVal( hash, mType, HLMS_CACHE_FLAGS_NONE, HlmsPso() );
+        retVal.setProperties = mT[kNoTid].setProperties;
         retVal.pso.pass = passCache.passPso;
 
         return retVal;
     }
     //-----------------------------------------------------------------------------------
-    HlmsPassPso Hlms::getPassPsoForScene( SceneManager *sceneManager )
+    HlmsPassPso Hlms::getPassPsoForScene( SceneManager *sceneManager, const bool bForceCullNone )
     {
         const RenderPassDescriptor *renderPassDesc = mRenderSystem->getCurrentPassDescriptor();
 
         HlmsPassPso passPso;
 
-        //Needed so that memcmp in HlmsPassPso::operator == works correctly
-        memset( &passPso, 0, sizeof(HlmsPassPso) );
+        uint32 strongMacroblockBits =
+            bit_cast<uint32_t>( getProperty( kNoTid, HlmsPsoProp::StrongMacroblockBits ) );
+
+        // Needed so that memcmp in HlmsPassPso::operator == works correctly
+        silent_memset( &passPso, 0, sizeof( HlmsPassPso ) );
 
         passPso.stencilParams = mRenderSystem->getStencilBufferParams();
 
-        for( int i=0; i<OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
+        for( int i = 0; i < OGRE_MAX_MULTIPLE_RENDER_TARGETS; ++i )
         {
             RenderPassColourTarget passColourTarget = renderPassDesc->mColour[i];
 
             if( passColourTarget.texture )
             {
-                passPso.colourFormat[i]     = renderPassDesc->mColour[i].texture->getPixelFormat();
-                passPso.sampleDescription   = renderPassDesc->mColour[i].texture->getSampleDescription();
+                passPso.colourFormat[i] = renderPassDesc->mColour[i].texture->getPixelFormat();
+                passPso.sampleDescription = renderPassDesc->mColour[i].texture->getSampleDescription();
             }
             else
                 passPso.colourFormat[i] = PFG_NULL;
@@ -3176,62 +3838,67 @@ namespace Ogre
         passPso.depthFormat = PFG_NULL;
         if( renderPassDesc->mDepth.texture )
         {
-            passPso.depthFormat         = renderPassDesc->mDepth.texture->getPixelFormat();
-            passPso.sampleDescription   = renderPassDesc->mDepth.texture->getSampleDescription();
+            passPso.depthFormat = renderPassDesc->mDepth.texture->getPixelFormat();
+            passPso.sampleDescription = renderPassDesc->mDepth.texture->getSampleDescription();
         }
         else
         {
-            passPso.strongMacroblockBits |= HlmsPassPso::NoDepthBuffer;
+            strongMacroblockBits |= HlmsMacroblock::DepthCheckDisabled;
         }
 
-        passPso.adapterId = 1; //TODO: Ask RenderSystem current adapter ID.
+        passPso.adapterId = 1;  // TODO: Ask RenderSystem current adapter ID.
 
         if( sceneManager->getCurrentPrePassMode() == PrePassUse )
-            passPso.strongMacroblockBits |= HlmsPassPso::ForceDisableDepthWrites;
+            strongMacroblockBits |= HlmsMacroblock::DepthWriteDisabled;
 
         if( sceneManager->getCamerasInProgress().renderingCamera->getNeedsDepthClamp() )
-            passPso.strongMacroblockBits |= HlmsPassPso::ForceDepthClamp;
+            strongMacroblockBits |= HlmsMacroblock::DepthClampEnabled;
+
+        if( bForceCullNone )
+            strongMacroblockBits |= HlmsMacroblock::CullingMode_NONE;
 
         const bool invertVertexWinding = mRenderSystem->getInvertVertexWinding();
 
-        if( (renderPassDesc->requiresTextureFlipping() && !invertVertexWinding) ||
-            (!renderPassDesc->requiresTextureFlipping() && invertVertexWinding) )
+        if( ( renderPassDesc->requiresTextureFlipping() && !invertVertexWinding ) ||
+            ( !renderPassDesc->requiresTextureFlipping() && invertVertexWinding ) )
         {
-            passPso.strongMacroblockBits |= HlmsPassPso::InvertVertexWinding;
+            strongMacroblockBits |= HlmsMacroblock::InvertCullingMode;
         }
 
+        setProperty( kNoTid, HlmsPsoProp::StrongMacroblockBits,
+                     bit_cast<int32_t>( strongMacroblockBits ) );
         return passPso;
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::setTextureReg( ShaderType shaderType, const char *texName, int32 texUnit,
+    void Hlms::setTextureReg( size_t tid, ShaderType shaderType, const char *texName, int32 texUnit,
                               int32 numTexUnits )
     {
         OGRE_ASSERT_MEDIUM( numTexUnits < 16 );
 
-        const uint32 startIdx = static_cast<uint32>( mTextureNameStrings.size() );
+        const uint32 startIdx = static_cast<uint32>( mT[tid].textureNameStrings.size() );
         char const *copyName = texName;
         while( *copyName != '\0' )
-            mTextureNameStrings.push_back( *copyName++ );
-        mTextureNameStrings.push_back( '\0' );
-        mTextureRegs[shaderType].push_back( TextureRegs( startIdx, texUnit, numTexUnits ) );
+            mT[tid].textureNameStrings.push_back( *copyName++ );
+        mT[tid].textureNameStrings.push_back( '\0' );
+        mT[tid].textureRegs[shaderType].push_back( TextureRegs( startIdx, texUnit, numTexUnits ) );
 
-        setProperty( texName, texUnit );
+        setProperty( tid, texName, texUnit );
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::applyTextureRegisters( const HlmsCache *psoEntry )
+    void Hlms::applyTextureRegisters( const HlmsCache *psoEntry, const size_t tid )
     {
         if( mShaderProfile != "glsl" )
-            return; //D3D embeds the texture slots in the shader.
+            return;  // D3D embeds the texture slots in the shader.
 
         GpuProgramPtr shaders[NumShaderTypes];
-        shaders[VertexShader]   = psoEntry->pso.vertexShader;
-        shaders[PixelShader]    = psoEntry->pso.pixelShader;
+        shaders[VertexShader] = psoEntry->pso.vertexShader;
+        shaders[PixelShader] = psoEntry->pso.pixelShader;
         shaders[GeometryShader] = psoEntry->pso.geometryShader;
-        shaders[HullShader]     = psoEntry->pso.tesselationHullShader;
-        shaders[DomainShader]   = psoEntry->pso.tesselationDomainShader;
+        shaders[HullShader] = psoEntry->pso.tesselationHullShader;
+        shaders[DomainShader] = psoEntry->pso.tesselationDomainShader;
 
         String paramName;
-        for( size_t i=0; i<NumShaderTypes; ++i )
+        for( size_t i = 0; i < NumShaderTypes; ++i )
         {
             if( shaders[i] )
             {
@@ -3239,18 +3906,18 @@ namespace Ogre
 
                 int texUnits[16];
 
-                TextureRegsVec::const_iterator itor = mTextureRegs[i].begin();
-                TextureRegsVec::const_iterator endt = mTextureRegs[i].end();
+                TextureRegsVec::const_iterator itor = mT[tid].textureRegs[i].begin();
+                TextureRegsVec::const_iterator endt = mT[tid].textureRegs[i].end();
 
                 while( itor != endt )
                 {
-                    const char *paramNameC = &mTextureNameStrings[itor->strNameIdxStart];
+                    const char *paramNameC = &mT[tid].textureNameStrings[itor->strNameIdxStart];
                     paramName = paramNameC;
 
                     const int texUnitStart = itor->texUnit;
                     const int numTexUnits = itor->numTexUnits;
-                    for( int i = 0u; i < numTexUnits; ++i )
-                        texUnits[i] = texUnitStart + i;
+                    for( int j = 0u; j < numTexUnits; ++j )
+                        texUnits[j] = texUnitStart + j;
                     params->setNamedConstant( paramName, texUnits, static_cast<size_t>( numTexUnits ),
                                               1u );
                     ++itor;
@@ -3259,24 +3926,23 @@ namespace Ogre
         }
     }
     //-----------------------------------------------------------------------------------
-    const HlmsCache* Hlms::getMaterial( HlmsCache const *lastReturnedValue,
-                                        const HlmsCache &passCache,
-                                        const QueuedRenderable &queuedRenderable,
-                                        bool casterPass )
+    const HlmsCache *Hlms::getMaterial( HlmsCache const *lastReturnedValue,        //
+                                        const HlmsCache &passCache,                //
+                                        const QueuedRenderable &queuedRenderable,  //
+                                        bool casterPass,                           //
+                                        ParallelHlmsCompileQueue *parallelQueue )
     {
         uint32 finalHash;
         uint32 hash[2];
-        hash[0] = casterPass ? queuedRenderable.renderable->getHlmsCasterHash() :
-                               queuedRenderable.renderable->getHlmsHash();
+        hash[0] = casterPass ? queuedRenderable.renderable->getHlmsCasterHash()
+                             : queuedRenderable.renderable->getHlmsHash();
         hash[1] = passCache.hash;
 
-        //MurmurHash3_x86_32( hash, sizeof( hash ), IdString::Seed, &finalHash );
-
-        //If this assert triggers, we've created too many shader variations (or bug)
-        assert( (hash[0] >> HlmsBits::RenderableShift) <= HlmsBits::RendarebleHlmsTypeMask &&
-                "Too many material / meshes variations" );
-        assert( (hash[1] >> HlmsBits::PassShift) <= HlmsBits::PassMask &&
-                "Should never happen (we assert in preparePassHash)" );
+        // If this assert triggers, we've created too many shader variations (or bug)
+        OGRE_ASSERT_LOW( ( hash[0] >> HlmsBits::RenderableShift ) <= HlmsBits::RendarebleHlmsTypeMask &&
+                         "Too many material / meshes variations" );
+        OGRE_ASSERT_LOW( ( hash[1] >> HlmsBits::PassShift ) <= HlmsBits::PassMask &&
+                         "Should never happen (we assert in preparePassHash)" );
 
         finalHash = hash[0] | hash[1];
 
@@ -3286,19 +3952,100 @@ namespace Ogre
 
             if( !lastReturnedValue )
             {
-                lastReturnedValue = createShaderCacheEntry( hash[0], passCache, finalHash,
-                                                            queuedRenderable );
+                // Low level is a special case because it doesn't (yet?) support parallel compilation
+                if( !parallelQueue || mType == HLMS_LOW_LEVEL )
+                {
+                    lastReturnedValue = createShaderCacheEntry(
+                        hash[0], passCache, finalHash, queuedRenderable, nullptr, UINT64_MAX, kNoTid );
+                }
+                else
+                {
+                    // Create the entry now, but we'll fill it from a worker thread
+                    HlmsCache *stubEntry = addStubShaderCache( finalHash );
+                    lastReturnedValue = stubEntry;
+
+                    parallelQueue->pushRequest(
+                        { &passCache, stubEntry, queuedRenderable, hash[0], finalHash } );
+                }
+            }
+            else if( lastReturnedValue->flags == HLMS_CACHE_FLAGS_COMPILATION_REQUIRED )
+            {
+                // Stub entry was created for previous frame, but compilation was skipped
+                // due to exhausted time budget, and attempt should be repeated
+                HlmsCache *stubEntry = const_cast<HlmsCache *>( lastReturnedValue );
+
+                parallelQueue->pushRequest(
+                    { &passCache, stubEntry, queuedRenderable, hash[0], finalHash } );
             }
         }
 
         return lastReturnedValue;
     }
     //-----------------------------------------------------------------------------------
+    void Hlms::compileStubEntry( const HlmsCache &passCache, HlmsCache *reservedStubEntry,
+                                 uint64 deadline, QueuedRenderable queuedRenderable,
+                                 uint32 renderableHash, uint32 finalHash, size_t tid )
+    {
+        createShaderCacheEntry( renderableHash, passCache, finalHash, queuedRenderable,
+                                reservedStubEntry, deadline, tid );
+    }
+    //-----------------------------------------------------------------------------------
+    uint32 Hlms::getMaterialSerial01( uint32 lastReturnedValue, const HlmsCache &passCache,
+                                      const size_t passCacheIdx,
+                                      const QueuedRenderable &queuedRenderable, bool casterPass,
+                                      ParallelHlmsCompileQueue &parallelQueue )
+    {
+        uint32 finalHash;
+        uint32 hash[2];
+        hash[0] = casterPass ? queuedRenderable.renderable->getHlmsCasterHash()
+                             : queuedRenderable.renderable->getHlmsHash();
+        hash[1] = passCache.hash;
+
+        // If this assert triggers, we've created too many shader variations (or bug)
+        OGRE_ASSERT_LOW( ( hash[0] >> HlmsBits::RenderableShift ) <= HlmsBits::RendarebleHlmsTypeMask &&
+                         "Too many material / meshes variations" );
+        OGRE_ASSERT_LOW( ( hash[1] >> HlmsBits::PassShift ) <= HlmsBits::PassMask &&
+                         "Should never happen (we assert in preparePassHash)" );
+
+        finalHash = hash[0] | hash[1];
+
+        if( lastReturnedValue != finalHash )
+        {
+            HlmsCache const *shaderCache = this->getShaderCache( finalHash );
+
+            if( !shaderCache )
+            {
+                // Low level is a special case because it doesn't (yet?) support parallel compilation
+                if( mType != HLMS_LOW_LEVEL )
+                {
+                    // Create the entry now, but we'll fill it from a worker thread
+                    HlmsCache *stubEntry = addStubShaderCache( finalHash );
+                    parallelQueue.pushWarmUpRequest(
+                        { reinterpret_cast<const HlmsCache *>( passCacheIdx ), stubEntry,
+                          queuedRenderable, hash[0], finalHash } );
+                }
+            }
+            else if( shaderCache->flags == HLMS_CACHE_FLAGS_COMPILATION_REQUIRED )
+            {
+                // Stub entry was created for previous frame, but compilation was skipped
+                // due to exhausted time budget, and attempt should be repeated.
+                HlmsCache *stubEntry = const_cast<HlmsCache *>( shaderCache );
+
+                parallelQueue.pushWarmUpRequest( { reinterpret_cast<const HlmsCache *>( passCacheIdx ),
+                                                   stubEntry, queuedRenderable, hash[0], finalHash } );
+            }
+        }
+
+        lastReturnedValue = finalHash;
+
+        return lastReturnedValue;
+    }
+    //-----------------------------------------------------------------------------------
     void Hlms::setDebugOutputPath( bool enableDebugOutput, bool outputProperties, const String &path )
     {
-        mDebugOutput            = enableDebugOutput;
-        mDebugOutputProperties  = outputProperties;
-        mOutputPath             = path;
+        mDebugOutput = enableDebugOutput;
+        mDebugOutputProperties = outputProperties;
+        mOutputPath = path;
     }
     //-----------------------------------------------------------------------------------
     void Hlms::setListener( HlmsListener *listener )
@@ -3309,14 +4056,135 @@ namespace Ogre
             mListener = listener;
     }
     //-----------------------------------------------------------------------------------
-    HlmsListener* Hlms::getListener() const
+    HlmsListener *Hlms::getListener() const { return mListener == &c_defaultListener ? 0 : mListener; }
+    //-----------------------------------------------------------------------------------
+    void Hlms::_clearShaderCache() { clearShaderCache(); }
+    //-----------------------------------------------------------------------------------
+    void Hlms::_addDatablockCustomPieceFile( const String &filename, const String &resourceGroup )
     {
-        return mListener == &c_defaultListener ? 0 : mListener;
+        const int32 filenameHash = static_cast<int32>( IdString( filename ).getU32Value() );
+        DatablockCustomPieceFileMap::const_iterator itor =
+            mDatablockCustomPieceFiles.find( filenameHash );
+
+        const DataStreamPtr stream =
+            ResourceGroupManager::getSingleton().openResource( filename, resourceGroup );
+
+        const String sourceCode = stream->getAsString();
+
+        if( itor == mDatablockCustomPieceFiles.end() )
+        {
+            mDatablockCustomPieceFiles.insert(
+                { filenameHash, { filename, resourceGroup, sourceCode } } );
+        }
+        else if( itor->second.sourceCode != sourceCode )
+        {
+            OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS,
+                         "Calling setCustomPieceFile and/or setCustomPieceCodeFromMemory twice with "
+                         "same filename '" +
+                             filename +
+                             "' but different content.\n"
+                             "Maybe there's an HlmsDiskCache bug? Try deleting the cache.\n"
+                             "Maybe there's a file name hash collision?",
+                         "Hlms::_addDatablockCustomPieceFile" );
+        }
     }
     //-----------------------------------------------------------------------------------
-    void Hlms::_clearShaderCache()
+    Hlms::CachedCustomPieceFileStatus Hlms::_addDatablockCustomPieceFile(
+        const String &filename, const String &resourceGroup, const uint64 sourceCodeHash[2] )
     {
-        clearShaderCache();
+        const int32 filenameHash = static_cast<int32>( IdString( filename ).getU32Value() );
+        DatablockCustomPieceFileMap::const_iterator itor =
+            mDatablockCustomPieceFiles.find( filenameHash );
+
+        try
+        {
+            Hlms::CachedCustomPieceFileStatus retVal = CCPFS_Success;
+
+            const DataStreamPtr stream =
+                ResourceGroupManager::getSingleton().openResource( filename, resourceGroup );
+
+            const String sourceCode = stream->getAsString();
+
+            DatablockCustomPieceFile entry{ filename, resourceGroup, sourceCode };
+
+            uint64 currentChecksum[2];
+            entry.getCodeChecksum( currentChecksum );
+            if( currentChecksum[0] != sourceCodeHash[0] && currentChecksum[1] != sourceCodeHash[1] )
+                retVal = CCPFS_OutOfDate;
+
+            if( itor == mDatablockCustomPieceFiles.end() )
+            {
+                mDatablockCustomPieceFiles.insert( { filenameHash, entry } );
+            }
+            else if( itor->second.sourceCode != sourceCode )
+            {
+                OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS,
+                             "Calling setCustomPieceFile and/or setCustomPieceCodeFromMemory twice with "
+                             "same filename '" +
+                                 filename +
+                                 "' but different content.\n"
+                                 "Maybe there's an HlmsDiskCache bug? Try deleting the cache.\n"
+                                 "Maybe there's a file name hash collision?",
+                             "Hlms::_addDatablockCustomPieceFile" );
+            }
+
+            return retVal;
+        }
+        catch( FileNotFoundException &e )
+        {
+            LogManager::getSingleton().logMessage( e.getFullDescription(), LML_CRITICAL );
+            return CCPFS_CriticalError;
+        }
+    }
+    //-----------------------------------------------------------------------------------
+    void Hlms::_addDatablockCustomPieceFileFromMemory( const String &filename, const String &sourceCode )
+    {
+        const int32 filenameHash = static_cast<int32>( IdString( filename ).getU32Value() );
+        DatablockCustomPieceFileMap::const_iterator itor =
+            mDatablockCustomPieceFiles.find( filenameHash );
+
+        if( itor == mDatablockCustomPieceFiles.end() )
+        {
+            mDatablockCustomPieceFiles.insert( { filenameHash, { filename, "", sourceCode } } );
+        }
+        else if( itor->second.sourceCode != sourceCode )
+        {
+            OGRE_EXCEPT( Exception::ERR_INVALIDPARAMS,
+                         "Calling setCustomPieceFile and/or setCustomPieceCodeFromMemory twice with "
+                         "same filename '" +
+                             filename +
+                             "' but different content.\n"
+                             "Maybe there's an HlmsDiskCache bug? Try deleting the cache.\n"
+                             "Maybe there's a file name hash collision?",
+                         "Hlms::_addDatablockCustomPieceFileFromMemory" );
+        }
+    }
+    //-----------------------------------------------------------------------------------
+    bool Hlms::isDatablockCustomPieceFileCacheable( int32 filenameHashId ) const
+    {
+        DatablockCustomPieceFileMap::const_iterator itor =
+            mDatablockCustomPieceFiles.find( filenameHashId );
+        if( itor != mDatablockCustomPieceFiles.end() )
+            return itor->second.isCacheable();
+        return false;
+    }
+    //-----------------------------------------------------------------------------------
+    const String &Hlms::getDatablockCustomPieceFileNameStr( int32 filenameHashId ) const
+    {
+        DatablockCustomPieceFileMap::const_iterator itor =
+            mDatablockCustomPieceFiles.find( filenameHashId );
+        if( itor != mDatablockCustomPieceFiles.end() )
+            return itor->second.filename;
+        return BLANKSTRING;
+    }
+    //-----------------------------------------------------------------------------------
+    const Hlms::DatablockCustomPieceFile *Hlms::getDatablockCustomPieceData( int32 filenameHashId ) const
+    {
+        DatablockCustomPieceFileMap::const_iterator itor =
+            mDatablockCustomPieceFiles.find( filenameHashId );
+        if( itor != mDatablockCustomPieceFiles.end() )
+            return &itor->second;
+        return 0;
     }
     //-----------------------------------------------------------------------------------
     void Hlms::_changeRenderSystem( RenderSystem *newRs )
@@ -3326,8 +4194,8 @@ namespace Ogre
 
         mShaderProfile = "unset!";
         mShaderFileExt = "unset!";
-        mShaderSyntax  = "unset!";
-        memset( mShaderTargets, 0, sizeof(mShaderTargets) );
+        mShaderSyntax = "unset!";
+        memset( mShaderTargets, 0, sizeof( mShaderTargets ) );
 
         if( mRenderSystem )
         {
@@ -3339,11 +4207,11 @@ namespace Ogre
                     mFastShaderBuildHack = StringConverter::parseBool( itor->second.currentValue );
             }
 
-            //Prefer glslvk over hlslvk over glsl, and glsl over glsles
-            const String shaderProfiles[6] = { "hlsl", "glsles", "glsl", "hlslvk", "glslvk", "metal" };
+            // Prefer glslvk over hlslvk over glsl
+            const String shaderProfiles[6] = { "hlsl", "glsl", "hlslvk", "glslvk", "metal" };
             const RenderSystemCapabilities *capabilities = mRenderSystem->getCapabilities();
 
-            for( size_t i=0; i<6; ++i )
+            for( size_t i = 0; i < 6; ++i )
             {
                 if( capabilities->isShaderProfileSupported( shaderProfiles[i] ) )
                 {
@@ -3356,9 +4224,9 @@ namespace Ogre
             {
                 mShaderFileExt = ".hlsl";
 
-                for( size_t i=0; i<NumShaderTypes; ++i )
+                for( size_t i = 0; i < NumShaderTypes; ++i )
                 {
-                    for( size_t j=0; j<5 && !mShaderTargets[i]; ++j )
+                    for( size_t j = 0; j < 5 && !mShaderTargets[i]; ++j )
                     {
                         if( capabilities->isShaderProfileSupported( BestD3DShaderTargets[i][j] ) )
                             mShaderTargets[i] = &BestD3DShaderTargets[i][j];
@@ -3382,14 +4250,15 @@ namespace Ogre
                     uint32 minGlVersion;
                 };
 
-                Extensions extensions[] =
-                {
+                Extensions extensions[] = {
+                    // clang-format off
                     { "GL_ARB_base_instance",               420 },
                     { "GL_ARB_shading_language_420pack",    420 },
                     { "GL_ARB_texture_buffer_range",        430 },
+                    // clang-format on
                 };
 
-                for( size_t i=0; i<sizeof(extensions) / sizeof(extensions[0]); ++i )
+                for( size_t i = 0; i < sizeof( extensions ) / sizeof( extensions[0] ); ++i )
                 {
                     if( mRenderSystem->getNativeShadingLanguageVersion() >= extensions[i].minGlVersion ||
                         mRenderSystem->checkExtension( extensions[i].extName ) )
@@ -3407,48 +4276,47 @@ namespace Ogre
         }
     }
     //-----------------------------------------------------------------------------------
-    /*void Hlms::generateFor()
+    void Hlms::getDefaultPaths( String &outDataFolderPath, StringVector &outLibraryFoldersPaths,
+                                const ConfigFile &configFile )
     {
-        uint16 numWorldTransforms = 1;
-        bool castShadows          = true;
+        getDefaultPaths( outDataFolderPath, outLibraryFoldersPaths, configFile, mTypeNameStr );
+    }
+    //-----------------------------------------------------------------------------------
+    void Hlms::getDefaultPaths( String &outDataFolderPath, StringVector &outLibraryFoldersPaths,
+                                const ConfigFile &configFile, const String &hlmsTypeName )
+    {
+        outLibraryFoldersPaths = configFile.getMultiSetting( "Library", hlmsTypeName );
+        outDataFolderPath = configFile.getSetting( "Main", hlmsTypeName );
 
-        *//*std::ifstream inFile( "E:/Projects/Hlms/bin/Hlms/PBS/GLSL/VertexShader_vs.glsl",
-                              std::ios::in | std::ios::binary );
-        std::ofstream outFile( "E:/Projects/Hlms/bin/Hlms/PBS/GLSL/Output_vs.glsl",
-                               std::ios::out | std::ios::binary );*//*
-        std::ifstream inFile( "E:/Projects/Hlms/bin/Hlms/PBS/GLSL/PixelShader_ps.glsl",
-                                      std::ios::in | std::ios::binary );
-        std::ofstream outFile( "E:/Projects/Hlms/bin/Hlms/PBS/GLSL/Output_ps.glsl",
-                               std::ios::out | std::ios::binary );
-
-        String inString;
-        String outString;
-
-        inFile.seekg( 0, std::ios::end );
-        inString.resize( inFile.tellg() );
-        inFile.seekg( 0, std::ios::beg );
-
-        inFile.read( &inString[0], inString.size() );
-
-        setCommonProperties();
-        //this->parse( inString, outString );
-        this->parseForEach( inString, outString );
-        this->parseProperties( outString, inString );
-        this->collectPieces( inString, outString );
-        this->insertPieces( outString, inString );
-        this->parseCounter( inString, outString );
-
-        outFile.write( &outString[0], outString.size() );
-    }*/
+        // We need to know what RenderSystem is currently in use, as the
+        // name of the compatible shading language is part of the path
+        Ogre::RenderSystem *renderSystem = Ogre::Root::getSingleton().getRenderSystem();
+        Ogre::String shaderSyntax = "GLSL";
+        if( renderSystem->getName() == "Direct3D11 Rendering Subsystem" )
+            shaderSyntax = "HLSL";
+        else if( renderSystem->getName() == "Metal Rendering Subsystem" )
+            shaderSyntax = "Metal";
+        for( String &libraryPath : outLibraryFoldersPaths )
+        {
+            const size_t pos = libraryPath.find( "[SHADER_SYNTAX]" );
+            if( pos != String::npos )
+                libraryPath.replace( pos, sizeof( "[SHADER_SYNTAX]" ) - 1u, shaderSyntax );
+        }
+        {
+            const size_t pos = outDataFolderPath.find( "[SHADER_SYNTAX]" );
+            if( pos != String::npos )
+                outDataFolderPath.replace( pos, sizeof( "[SHADER_SYNTAX]" ) - 1u, shaderSyntax );
+        }
+    }
     //-----------------------------------------------------------------------------------
     unsigned long Hlms::calculateLineCount( const String &buffer, size_t idx )
     {
         String::const_iterator itor = buffer.begin();
-        String::const_iterator end  = buffer.begin() + idx;
+        String::const_iterator endt = buffer.begin() + static_cast<ptrdiff_t>( idx );
 
         unsigned long lineCount = 0;
 
-        while( itor != end )
+        while( itor != endt )
         {
             if( *itor == '\n' )
                 ++lineCount;
@@ -3466,12 +4334,12 @@ namespace Ogre
     //-----------------------------------------------------------------------------------
     inline void Hlms::Expression::swap( Expression &other )
     {
-        std::swap( this->result,    other.result );
-        std::swap( this->negated,   other.negated );
-        std::swap( this->type,      other.type );
+        std::swap( this->result, other.result );
+        std::swap( this->negated, other.negated );
+        std::swap( this->type, other.type );
         this->children.swap( other.children );
         this->value.swap( other.value );
     }
-}
+}  // namespace Ogre
 
 #undef OGRE_HASH128_FUNC

@@ -96,15 +96,14 @@ namespace Ogre
 
         const size_t stringNameBaseSize = matName.size();
         matName += StringConverter::toString( getId() );
-        MaterialPtr mat = MaterialManager::getSingleton()
-                              .getByName( matName, ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME )
-                              .staticCast<Material>();
-        if( mat.isNull() )
+        MaterialPtr mat = std::static_pointer_cast<Material>( MaterialManager::getSingleton().getByName(
+            matName, ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME ) );
+        if( !mat )
         {
-            MaterialPtr baseMat = MaterialManager::getSingleton()
-                                      .load( matName.substr( 0u, stringNameBaseSize ),
-                                             ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME )
-                                      .staticCast<Material>();
+            MaterialPtr baseMat =
+                std::static_pointer_cast<Material>( MaterialManager::getSingleton().load(
+                    matName.substr( 0u, stringNameBaseSize ),
+                    ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME ) );
             mat = baseMat->clone( matName );
             mat->load();
         }
@@ -120,7 +119,7 @@ namespace Ogre
         const uint32 bandMask = bandPoints - 2u;
         const uint32 sectionsInBand = ( bandPoints / 2u ) - 1u;
         const uint32 totalPoints = sectionsInBand * bandPoints;
-        const float sectionArc = Math::TWO_PI / sectionsInBand;
+        const float sectionArc = Math::TWO_PI / float( sectionsInBand );
 
         const uint bandMaskPower[3] = { bandMask, bandPower, totalPoints };
         const Vector2 sectionsBandArc( static_cast<float>( sectionsInBand ), sectionArc );

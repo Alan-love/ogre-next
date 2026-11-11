@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "OgreVulkanStagingTexture.h"
 
 #include "OgreVulkanDevice.h"
+#include "OgreVulkanMappings.h"
 #include "OgreVulkanTextureGpu.h"
 #include "OgreVulkanUtils.h"
 #include "Vao/OgreVulkanDynamicBuffer.h"
@@ -149,7 +150,7 @@ namespace Ogre
         VulkanTextureGpu *dstTextureVulkan = static_cast<VulkanTextureGpu *>( dstTexture );
 
         const size_t distToStart =
-            ( size_t )( static_cast<uint8 *>( srcBox.data ) - static_cast<uint8 *>( mLastMappedPtr ) );
+            (size_t)( static_cast<uint8 *>( srcBox.data ) - static_cast<uint8 *>( mLastMappedPtr ) );
         const VkDeviceSize offsetPtr = mInternalBufferStart + distToStart;
 
         const uint32 destinationSlice =
@@ -169,7 +170,8 @@ namespace Ogre
         }
         region.bufferImageHeight = 0;
 
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.aspectMask =
+            VulkanMappings::getImageAspect( dstTexture->getPixelFormat() );
         region.imageSubresource.mipLevel = mipLevel;
         region.imageSubresource.baseArrayLayer = destinationSlice;
         region.imageSubresource.layerCount = numSlices;
@@ -181,7 +183,7 @@ namespace Ogre
         region.imageExtent.height = srcBox.height;
         region.imageExtent.depth = srcBox.depth;
 
-        vkCmdCopyBufferToImage( device->mGraphicsQueue.mCurrentCmdBuffer, mVboName,
+        vkCmdCopyBufferToImage( device->mGraphicsQueue.getCurrentCmdBuffer(), mVboName,
                                 dstTextureVulkan->getFinalTextureName(),
                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region );
     }

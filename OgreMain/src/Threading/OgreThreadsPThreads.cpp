@@ -30,19 +30,29 @@ THE SOFTWARE.
 
 #include "Threading/OgreThreads.h"
 
+#include "Threading/OgreLightweightMutex.h"
+
 #include "ogrestd/vector.h"
 
 namespace Ogre
 {
+    static LightweightMutex mOsHandleMutex;
+
     ThreadHandle::ThreadHandle( size_t threadIdx, void *userParam ) :
         mThreadIdx( threadIdx ),
         mUserParam( userParam )
     {
     }
     //-----------------------------------------------------------------------------------
-    ThreadHandle::~ThreadHandle()
+    ThreadHandle::~ThreadHandle() {}
+    //-----------------------------------------------------------------------------------
+    void ThreadHandle::_setOsHandleToSelf()
     {
+        ScopedLock lock( mOsHandleMutex );
+        pthread_t handle = pthread_self();
+        _setOsHandle( handle );
     }
+    //-----------------------------------------------------------------------------------
     //-----------------------------------------------------------------------------------
     //-----------------------------------------------------------------------------------
 
@@ -52,7 +62,10 @@ namespace Ogre
         ThreadHandlePtr retVal( new ThreadHandle( threadIdx, param ) );
         pthread_t threadId;
         pthread_create( &threadId, NULL, entryPoint, threadArg );
-        retVal->_setOsHandle( threadId );
+        {
+            ScopedLock lock( mOsHandleMutex );
+            retVal->_setOsHandle( threadId );
+        }
         return retVal;
     }
     //-----------------------------------------------------------------------------------
@@ -60,7 +73,7 @@ namespace Ogre
     {
         assert( numThreadHandles < 128 );
 
-        for( size_t i=0; i<numThreadHandles; ++i )
+        for( size_t i = 0; i < numThreadHandles; ++i )
             pthread_join( threadHandles[i]->_getOsHandle(), NULL );
     }
     //-----------------------------------------------------------------------------------
@@ -73,9 +86,46 @@ namespace Ogre
     void Threads::Sleep( uint32 milliseconds )
     {
         timespec timeToSleep;
-        timeToSleep.tv_nsec = (milliseconds % 1000) * 1000000;
-        timeToSleep.tv_sec  = milliseconds / 1000;
+        timeToSleep.tv_nsec = ( milliseconds % 1000 ) * 1000000;
+        timeToSleep.tv_sec = milliseconds / 1000;
         nanosleep( &timeToSleep, 0 );
+    }
+    //-----------------------------------------------------------------------------------
+    bool Threads::SetThreadName( ThreadHandle *thread, const String &name )
+    {
+        constexpr size_t kMaxChars = 15u;
+        char threadName[kMaxChars + 1u];
+
+        const size_t maxLength = std::min( kMaxChars, name.size() );
+        memcpy( threadName, name.c_str(), maxLength );
+        threadName[maxLength] = '\0';
+
+#if OGRE_PLATFORM != OGRE_PLATFORM_APPLE && OGRE_PLATFORM != OGRE_PLATFORM_APPLE_IOS
+        pthread_t threadHandle;
+        if( thread )
+            threadHandle = thread->_getOsHandle();
+        else
+            threadHandle = pthread_self();
+
+        const int result = pthread_setname_np( threadHandle, threadName );
+
+        return result == 0u;
+#else
+        bool bCanNameThread = false;
+
+        if( thread )
+            bCanNameThread = thread->_getOsHandle() == pthread_self();
+        else
+            bCanNameThread = true;
+
+        if( bCanNameThread )
+        {
+            const int result = pthread_setname_np( threadName );
+            bCanNameThread = result == 0u;
+        }
+
+        return bCanNameThread;
+#endif
     }
     //-----------------------------------------------------------------------------------
     bool Threads::CreateTls( TlsHandle *outTls )
@@ -87,18 +137,9 @@ namespace Ogre
         return result == 0;
     }
     //-----------------------------------------------------------------------------------
-    void Threads::DestroyTls( TlsHandle tlsHandle )
-    {
-        pthread_key_delete( tlsHandle );
-    }
+    void Threads::DestroyTls( TlsHandle tlsHandle ) { pthread_key_delete( tlsHandle ); }
     //-----------------------------------------------------------------------------------
-    void Threads::SetTls( TlsHandle tlsHandle, void *value )
-    {
-        pthread_setspecific( tlsHandle, value );
-    }
+    void Threads::SetTls( TlsHandle tlsHandle, void *value ) { pthread_setspecific( tlsHandle, value ); }
     //-----------------------------------------------------------------------------------
-    void* Threads::GetTls( TlsHandle tlsHandle )
-    {
-        return pthread_getspecific( tlsHandle );
-    }
-}
+    void *Threads::GetTls( TlsHandle tlsHandle ) { return pthread_getspecific( tlsHandle ); }
+}  // namespace Ogre

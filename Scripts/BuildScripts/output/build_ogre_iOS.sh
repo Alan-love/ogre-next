@@ -15,7 +15,7 @@ cd ogre-next-deps
 mkdir build_iOS
 cd build_iOS
 echo "--- Building ogre-next-deps ---"
-cmake -G Xcode .. || exit $?
+cmake -DOGRE_BUILD_PLATFORM_APPLE_IOS=1 -G Xcode .. || exit $?
 cmake --build . --target install --config Debug || exit $?
 cmake --build . --target install --config RelWithDebInfo || exit $?
 
@@ -33,7 +33,7 @@ fi
 mkdir -p build_iOS
 cd build_iOS
 echo "--- Configuring Ogre-Next ---"
-cmake -D OGRE_USE_BOOST=0-D OGRE_CONFIG_THREAD_PROVIDER=0 \
+cmake -D OGRE_CONFIG_THREAD_PROVIDER=0 \
 -D OGRE_CONFIG_THREADS=0 \
 -D OGRE_BUILD_COMPONENT_SCENE_FORMAT=0 \
 -D OGRE_BUILD_SAMPLES2=0 \
